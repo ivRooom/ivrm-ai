@@ -5,6 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PostgresUsageStore, STALE_AFTER_MINUTES } from "../cost/pg-store.js";
 import { DEFAULT_LIMITS } from "../cost/limits.js";
 import { usageStoreContract } from "../cost/store-contract.js";
+import { PostgresChatStore } from "../chat/pg-store.js";
+import { chatStoreContract } from "../chat/store-contract.js";
 import { PostgresAuditLog } from "./audit.js";
 import { migrate } from "./migrate.js";
 
@@ -44,6 +46,11 @@ describe.skipIf(!url)("postgres", () => {
   usageStoreContract("postgres", async () => {
     await pool.query("TRUNCATE usage_reservations");
     return new PostgresUsageStore(pool);
+  });
+
+  chatStoreContract("postgres", async () => {
+    await pool.query("TRUNCATE projects, conversations, messages CASCADE");
+    return new PostgresChatStore(pool);
   });
 
   describe("PostgresUsageStore", () => {

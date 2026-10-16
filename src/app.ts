@@ -4,8 +4,9 @@ import {
   type AuthDeps,
   type AuthEnv,
 } from "./auth/middleware.js";
+import { chatRoutes, type ChatDeps } from "./chat/routes.js";
 
-export type AppDeps = { auth: AuthDeps };
+export type AppDeps = { auth: AuthDeps; chat: ChatDeps };
 
 export function createApp(deps: AppDeps) {
   const app = new Hono();
@@ -24,6 +25,7 @@ export function createApp(deps: AppDeps) {
       },
     });
   });
+  api.route("/", chatRoutes(deps.chat));
   app.route("/api", api);
 
   return app;

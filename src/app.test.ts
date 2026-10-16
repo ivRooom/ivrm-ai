@@ -13,7 +13,10 @@ import {
   type Session,
   type SessionVerifier,
 } from "./auth/session.js";
+import { makeChatDeps } from "./chat/test-support.js";
 import { loadConfig } from "./config.js";
+
+const env = { DATABASE_URL: "postgres://x/y" };
 
 const ORIGIN = "https://ai.ivrm.jp";
 const COOKIE = "ivrm_admin_session=abc";
@@ -40,7 +43,10 @@ function appWith(opts: {
   const policy: PolicyDecisionClient = { authorize };
   return {
     authorize,
-    app: createApp({ auth: { verifier, policy, allowedOrigin: ORIGIN } }),
+    app: createApp({
+      auth: { verifier, policy, allowedOrigin: ORIGIN },
+      chat: makeChatDeps({ policy }).deps,
+    }),
   };
 }
 
@@ -244,23 +250,30 @@ describe("StaticAllowPolicyDecisionClient", () => {
 
 describe("loadConfig", () => {
   it("applies safe defaults", () => {
-    const config = loadConfig({});
+    const config = loadConfig(env);
     expect(config.PORT).toBe(3100);
     expect(config.AI_KILL_SWITCH).toBe(false);
     expect(config.AI_POLICY_MODE).toBe("api");
   });
 
   it("rejects an invalid kill switch value", () => {
-    expect(() => loadConfig({ AI_KILL_SWITCH: "yes" })).toThrow();
+    expect(() => loadConfig({ ...env, AI_KILL_SWITCH: "yes" })).toThrow();
   });
 
   it("refuses the static policy in production", () => {
     expect(() =>
-      loadConfig({ NODE_ENV: "production", AI_POLICY_MODE: "static-allow" })
+      loadConfig({
+        ...env,
+        NODE_ENV: "production",
+        AI_POLICY_MODE: "static-allow",
+      })
     ).toThrow();
     expect(
-      loadConfig({ NODE_ENV: "development", AI_POLICY_MODE: "static-allow" })
-        .AI_POLICY_MODE
+      loadConfig({
+        ...env,
+        NODE_ENV: "development",
+        AI_POLICY_MODE: "static-allow",
+      }).AI_POLICY_MODE
     ).toBe("static-allow");
   });
 });

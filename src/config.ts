@@ -11,6 +11,7 @@ const schema = z
       .enum(["development", "test", "production"])
       .default("development"),
     PORT: z.coerce.number().int().min(1).max(65535).default(3100),
+    DATABASE_URL: z.string().min(1),
     IVRM_API_BASE_URL: z.url().default("https://api.ivrm.jp"),
     AI_ALLOWED_ORIGIN: z.url().default("https://ai.ivrm.jp"),
     // `api`: ask api.ivrm.jp (the policy decision point).
@@ -18,6 +19,13 @@ const schema = z
     AI_POLICY_MODE: z.enum(["api", "static-allow"]).default("api"),
     AWS_REGION: z.string().min(1).default("ap-northeast-1"),
     AI_KILL_SWITCH: boolean,
+    // Upper bound on one answer, before the model's own limit.
+    CHAT_MAX_OUTPUT_TOKENS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(8192)
+      .default(1024),
   })
   .refine(
     (env) => !(env.NODE_ENV === "production" && env.AI_POLICY_MODE !== "api"),
