@@ -36,3 +36,50 @@ jobs:
       - run: pnpm format:check
       - run: pnpm test
       - run: pnpm build
+
+  # The production image must build, migrate and start. Nothing is published.
+  image:
+    runs-on: ubuntu-latest
+    needs: check
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: ivrm_ai_image
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:test@127.0.0.1:5433/ivrm_ai_image
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build --tag ivrm-ai:ci .
+      - name: Run as the non-root user
+        run: test "$(docker run --rm --entrypoint id ivrm-ai:ci -u)" = "10001"
+      - name: Apply migrations with the image
+        run: |
+          docker run --rm --network host -e DATABASE_URL \
+            ivrm-ai:ci node dist/db/migrate-cli.js
+      - name: Start and smoke test
+        run: |
+          docker run -d --name ivrm-ai --network host \
+            -e DATABASE_URL -e NODE_ENV=production -e PORT=3100 \
+            ivrm-ai:ci
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3100/healthz >/dev/null; then break; fi
+            sleep 1
+            if [ "$i" -eq 30 ]; then docker logs ivrm-ai; exit 1; fi
+          done
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3100/healthz)" = "200"
+          # Without a session cookie the API is closed.
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3100/api/me)" = "401"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3100/api/models)" = "401"
+      - name: Logs on failure
+        if: failure()
+        run: docker logs ivrm-ai || true
