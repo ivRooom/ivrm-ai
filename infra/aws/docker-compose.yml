@@ -1,0 +1,49 @@
+services:
+  ai:
+    image: ${IVRM_AI_IMAGE:?IVRM_AI_IMAGE is required}
+    container_name: ivrm-ai
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:3100:3100"
+    environment:
+      NODE_ENV: production
+      PORT: 3100
+      IVRM_API_BASE_URL: ${IVRM_API_BASE_URL:-https://api.ivrm.jp}
+      AI_ALLOWED_ORIGIN: ${AI_ALLOWED_ORIGIN:-https://ai.ivrm.jp}
+      AI_POLICY_MODE: api
+      AWS_REGION: ${AWS_REGION:-ap-northeast-1}
+      AI_KILL_SWITCH: ${AI_KILL_SWITCH:-false}
+      CHAT_MAX_OUTPUT_TOKENS: ${CHAT_MAX_OUTPUT_TOKENS:-1024}
+    # DATABASE_URL lives in this file (written from Parameter Store by
+    # deploy.sh, mode 0600). It is never part of the compose file or the image.
+    env_file:
+      - /opt/ivrm/ai/runtime.env
+    # The host runs five other apps on 2 GB: keep ivrm-ai small so a runaway
+    # cannot take production down with it.
+    mem_limit: 256m
+    cpus: 0.5
+    networks:
+      - runtime-edge
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3100/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  runtime-edge:
+    external: true
+    name: ivrm-runtime-edge
