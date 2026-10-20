@@ -5,6 +5,7 @@ import {
   ApiPolicyDecisionClient,
   StaticAllowPolicyDecisionClient,
 } from "./auth/policy.js";
+import { CachedPolicyDecisionClient } from "./auth/decision-cache.js";
 import { ApiSessionVerifier } from "./auth/session.js";
 import { PostgresChatStore } from "./chat/pg-store.js";
 import { loadConfig } from "./config.js";
@@ -21,7 +22,11 @@ const pool = new Pool({ connectionString: config.DATABASE_URL });
 const policy =
   config.AI_POLICY_MODE === "static-allow"
     ? new StaticAllowPolicyDecisionClient()
-    : new ApiPolicyDecisionClient(config.IVRM_API_BASE_URL);
+    : // One round trip to api.ivrm.jp is reused for 30 seconds per user and
+      // question, so a request does not turn into several.
+      new CachedPolicyDecisionClient(
+        new ApiPolicyDecisionClient(config.IVRM_API_BASE_URL)
+      );
 
 const catalog = createDefaultCatalog();
 
