@@ -1,0 +1,145 @@
+name: Deploy
+
+# Releases ivrm-ai to the production instance (ECR -> SSM -> Docker Compose).
+# Manual only. It needs, in this repository:
+#   - an `aws-runtime` Environment (deployment branches: main only)
+#   - variables AWS_ACCOUNT_ID, AWS_REGION, AWS_ROLE_ARN, AWS_ECR_REPOSITORY,
+#     AWS_EC2_INSTANCE_ID
+# and, in AWS, a GitHub OIDC role that trusts this repository
+# (docs/deploy.md). Without them the job fails at the first check.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_deploy:
+        description: "Type DEPLOY to release the main branch to production"
+        required: true
+        type: string
+      run_migrations:
+        description: "Apply SQL migrations to the production database before starting"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ivrm-ai-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: ECR publish and EC2 deploy
+    if: inputs.confirm_deploy == 'DEPLOY' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: aws-runtime
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check configuration
+        shell: bash
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+          AWS_ECR_REPOSITORY: ${{ vars.AWS_ECR_REPOSITORY }}
+          AWS_EC2_INSTANCE_ID: ${{ vars.AWS_EC2_INSTANCE_ID }}
+        run: |
+          set -euo pipefail
+          for name in AWS_ACCOUNT_ID AWS_REGION AWS_ROLE_ARN AWS_ECR_REPOSITORY AWS_EC2_INSTANCE_ID; do
+            test -n "${!name}" || { echo "missing repository variable: $name" >&2; exit 1; }
+          done
+
+      - uses: aws-actions/configure-aws-credentials@v6.1.2
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: ivrm-ai-deploy
+
+      - name: Check the AWS account
+        shell: bash
+        env:
+          EXPECTED_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          actual="$(aws sts get-caller-identity --query Account --output text)"
+          test "$actual" = "$EXPECTED_ACCOUNT_ID"
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push the ARM64 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          provenance: true
+          sbom: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ vars.AWS_ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha,scope=ivrm-ai-arm64
+          cache-to: type=gha,mode=max,scope=ivrm-ai-arm64,ignore-error=true
+
+      - name: Deploy through SSM
+        shell: bash
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          INSTANCE_ID: ${{ vars.AWS_EC2_INSTANCE_ID }}
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IVRM_AI_IMAGE: ${{ steps.ecr.outputs.registry }}/${{ vars.AWS_ECR_REPOSITORY }}:${{ github.sha }}
+          RUN_MIGRATIONS: ${{ inputs.run_migrations && 'true' || 'false' }}
+        run: |
+          set -Eeuo pipefail
+
+          compose_b64="$(base64 -w 0 infra/aws/docker-compose.yml)"
+          deploy_b64="$(base64 -w 0 infra/aws/deploy.sh)"
+
+          parameters="$(jq -cn \
+            --arg compose "$compose_b64" \
+            --arg deploy "$deploy_b64" \
+            --arg region "$AWS_REGION" \
+            --arg registry "$ECR_REGISTRY" \
+            --arg image "$IVRM_AI_IMAGE" \
+            --arg migrate "$RUN_MIGRATIONS" \
+            '{commands:[
+              "set -Eeuo pipefail",
+              "sudo mkdir -p /opt/ivrm/ai",
+              ("echo " + ($compose|@sh) + " | base64 -d | sudo tee /opt/ivrm/ai/docker-compose.yml >/dev/null"),
+              ("echo " + ($deploy|@sh) + " | base64 -d | sudo tee /opt/ivrm/ai/deploy.sh >/dev/null"),
+              "sudo chmod 750 /opt/ivrm/ai/deploy.sh",
+              ("sudo AWS_REGION=" + ($region|@sh) + " ECR_REGISTRY=" + ($registry|@sh) + " IVRM_AI_IMAGE=" + ($image|@sh) + " RUN_MIGRATIONS=" + ($migrate|@sh) + " /opt/ivrm/ai/deploy.sh")
+            ]}')"
+
+          command_id="$(aws ssm send-command \
+            --region "$AWS_REGION" \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "Deploy ivrm-ai ${GITHUB_SHA}" \
+            --parameters "$parameters" \
+            --query 'Command.CommandId' \
+            --output text)"
+
+          aws ssm wait command-executed \
+            --region "$AWS_REGION" \
+            --command-id "$command_id" \
+            --instance-id "$INSTANCE_ID" || true
+
+          result="$(aws ssm get-command-invocation \
+            --region "$AWS_REGION" \
+            --command-id "$command_id" \
+            --instance-id "$INSTANCE_ID" \
+            --query '{Status:Status,ResponseCode:ResponseCode,Output:StandardOutputContent,Error:StandardErrorContent}' \
+            --output json)"
+
+          echo "$result" | jq .
+          test "$(echo "$result" | jq -r '.Status')" = "Success"
+          test "$(echo "$result" | jq -r '.ResponseCode')" = "0"
