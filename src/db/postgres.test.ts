@@ -9,6 +9,7 @@ import { PostgresChatStore } from "../chat/pg-store.js";
 import { chatStoreContract } from "../chat/store-contract.js";
 import { PostgresAuditLog } from "./audit.js";
 import { migrate } from "./migrate.js";
+import { PostgresKillSwitchStore } from "../ops/kill-switch.js";
 
 // Runs against a real Postgres. Set TEST_DATABASE_URL to a throwaway database
 // whose name contains "test": the suite drops and recreates the public schema.
@@ -40,6 +41,7 @@ describe.skipIf(!url)("postgres", () => {
       const again = await migrate(pool, migrationsDir);
       expect(again.applied).toEqual([]);
       expect(again.skipped).toContain("0001_init.sql");
+      expect(again.skipped).toContain("0002_ops_flags.sql");
     });
   });
 
@@ -124,6 +126,46 @@ describe.skipIf(!url)("postgres", () => {
           detail: { model: "m1" },
         },
       ]);
+    });
+  });
+  describe("PostgresKillSwitchStore", () => {
+    it("is off without a row, and records every change", async () => {
+      await pool.query("TRUNCATE ops_flags, audit_logs");
+      const store = new PostgresKillSwitchStore(pool);
+      expect(await store.read()).toBe(false);
+
+      await store.set({ enabled: true, actorId: "op1", reason: "cost spike" });
+      expect(await store.read()).toBe(true);
+      await store.set({ enabled: false, actorId: "op2", reason: "resolved" });
+      expect(await store.read()).toBe(false);
+
+      const { rows } = await pool.query(
+        `SELECT actor_id, action, resource, detail FROM audit_logs
+          WHERE resource = 'ops_flags/kill_switch' ORDER BY id`
+      );
+      expect(rows).toEqual([
+        {
+          actor_id: "op1",
+          action: "ops.kill_switch.on",
+          resource: "ops_flags/kill_switch",
+          detail: { reason: "cost spike" },
+        },
+        {
+          actor_id: "op2",
+          action: "ops.kill_switch.off",
+          resource: "ops_flags/kill_switch",
+          detail: { reason: "resolved" },
+        },
+      ]);
+    });
+
+    it("rejects an unknown switch at the database level", async () => {
+      await expect(
+        pool.query(
+          `INSERT INTO ops_flags (name, enabled, updated_by)
+           VALUES ('other', true, 'op')`
+        )
+      ).rejects.toThrow();
     });
   });
 });
