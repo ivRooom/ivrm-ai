@@ -13,10 +13,10 @@ Compose on the instance -> Caddy (`ai.ivrm.jp` -> `ivrm-ai:3100`).
 
 | What | Where | Status |
 | --- | --- | --- |
-| IAM policy (Bedrock invoke by model ARN, `/ivrm/ai/*` parameters, ECR pull), ECR repository `ivrm/ai` | ivrm-web `infra/terraform/environments/production/ai_runtime.tf` (ivrm-web#580) | PR open, not applied |
-| Caddy route `ai.ivrm.jp` | ivrm-web `infra/aws/runtime/Caddyfile`, applied with the `AWS Home Edge` workflow | not applied |
+| IAM policy (Bedrock invoke by model ARN, `/ivrm/ai/*` parameters, ECR pull), ECR repository `ivrm/ai` | ivrm-web `infra/terraform/environments/production/ai_runtime.tf` (ivrm-web#581) | applied 2026-10-21 (attached to `ivrm-ec2-role`) |
+| Caddy route `ai.ivrm.jp` | ivrm-web `infra/aws/runtime/Caddyfile` (merged in ivrm-web#581), applied with the `AWS Home Edge` workflow | merged, not applied to the instance |
 | Cloudflare Tunnel public hostname `ai.ivrm.jp` -> `http://localhost:8080` (like the other hosts) | Cloudflare Zero Trust | not done |
-| GitHub OIDC role that trusts `ivRooom/ivrm-ai` and may push `ivrm/ai` and send SSM commands to the instance | IAM | not created |
+| GitHub OIDC role that trusts `ivRooom/ivrm-ai` and may push `ivrm/ai` and send SSM commands to the instance | IAM `ivrm-ai-github-deploy-role` (ivrm-web#584, `ai_deploy_role.tf`); trusts only the `aws-runtime` Environment | applied 2026-10-21 |
 | Repository variables `AWS_ACCOUNT_ID`, `AWS_REGION`, `AWS_ROLE_ARN`, `AWS_ECR_REPOSITORY` (`ivrm/ai`), `AWS_EC2_INSTANCE_ID`; Environment `aws-runtime` (main only) | this repository | not set |
 | SecureString `/ivrm/ai/database-url` (`postgres://…`, `sslmode=verify-full`) | SSM | **blocked: database not ready** |
 | Optional `/ivrm/ai/kill-switch` = `true` refuses every model call | SSM | absent = off |
