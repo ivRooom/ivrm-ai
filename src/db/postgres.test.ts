@@ -10,6 +10,7 @@ import { chatStoreContract } from "../chat/store-contract.js";
 import { PostgresAuditLog } from "./audit.js";
 import { migrate } from "./migrate.js";
 import { PostgresKillSwitchStore } from "../ops/kill-switch.js";
+import { pruneUsage } from "../cost/retention.js";
 
 // Runs against a real Postgres. Set TEST_DATABASE_URL to a throwaway database
 // whose name contains "test": the suite drops and recreates the public schema.
@@ -42,6 +43,7 @@ describe.skipIf(!url)("postgres", () => {
       expect(again.applied).toEqual([]);
       expect(again.skipped).toContain("0001_init.sql");
       expect(again.skipped).toContain("0002_ops_flags.sql");
+      expect(again.skipped).toContain("0003_usage_monthly.sql");
     });
   });
 
@@ -166,6 +168,116 @@ describe.skipIf(!url)("postgres", () => {
            VALUES ('other', true, 'op')`
         )
       ).rejects.toThrow();
+    });
+  });
+  describe("pruneUsage", () => {
+    const now = new Date("2026-10-21T03:00:00Z"); // keeps 2026-08 and later
+
+    async function seed() {
+      await pool.query(
+        "TRUNCATE usage_reservations, usage_monthly, audit_logs"
+      );
+      await pool.query(
+        `INSERT INTO usage_reservations
+           (user_id, day, month, amount_micro_usd, actual_micro_usd, status,
+            created_at, closed_at)
+         VALUES
+           ('u1', '2026-06-01', '2026-06', 100, 40, 'settled', now(), now()),
+           ('u1', '2026-06-02', '2026-06', 100, NULL, 'released', now(), now()),
+           ('u2', '2026-07-03', '2026-07', 300, 250, 'settled', now(), now()),
+           ('u1', '2026-08-01', '2026-08', 100, 90, 'settled', now(), now())`
+      );
+      // A dead process's row from an old month stays until the gate heals it.
+      await pool.query(
+        `INSERT INTO usage_reservations
+           (user_id, day, month, amount_micro_usd, status, created_at)
+         VALUES ('u3', '2026-07-31', '2026-07', 50, 'open', now())`
+      );
+    }
+
+    it("only reports without --apply", async () => {
+      await seed();
+      const result = await pruneUsage(pool, { now, apply: false, actorId: "" });
+      expect(result).toEqual({
+        cutoff: "2026-08",
+        rows: 3,
+        months: ["2026-06", "2026-07"],
+        applied: false,
+      });
+      const { rows } = await pool.query(
+        "SELECT count(*)::int AS n FROM usage_reservations"
+      );
+      expect(rows[0].n).toBe(5);
+    });
+
+    it("summarizes, deletes old closed rows and records it", async () => {
+      await seed();
+      const result = await pruneUsage(pool, {
+        now,
+        apply: true,
+        actorId: "op1",
+      });
+      expect(result.applied).toBe(true);
+      expect(result.rows).toBe(3);
+
+      const left = await pool.query(
+        "SELECT month, status FROM usage_reservations ORDER BY month"
+      );
+      expect(left.rows).toEqual([
+        { month: "2026-07", status: "open" },
+        { month: "2026-08", status: "settled" },
+      ]);
+      const summary = await pool.query(
+        `SELECT month, user_id, requests, released, charged_micro_usd::int AS charged
+           FROM usage_monthly ORDER BY month, user_id`
+      );
+      expect(summary.rows).toEqual([
+        {
+          month: "2026-06",
+          user_id: "u1",
+          requests: 2,
+          released: 1,
+          charged: 40,
+        },
+        {
+          month: "2026-07",
+          user_id: "u2",
+          requests: 1,
+          released: 0,
+          charged: 250,
+        },
+      ]);
+      const audit = await pool.query(
+        "SELECT actor_id, action, detail FROM audit_logs"
+      );
+      expect(audit.rows).toEqual([
+        {
+          actor_id: "op1",
+          action: "usage.prune",
+          detail: {
+            cutoff: "2026-08",
+            rows: 3,
+            months: ["2026-06", "2026-07"],
+          },
+        },
+      ]);
+    });
+
+    it("adds a late row to an existing summary instead of overwriting it", async () => {
+      await seed();
+      await pruneUsage(pool, { now, apply: true, actorId: "op1" });
+      await pool.query(
+        `INSERT INTO usage_reservations
+           (user_id, day, month, amount_micro_usd, actual_micro_usd, status,
+            created_at, closed_at)
+         VALUES ('u1', '2026-06-30', '2026-06', 10, 10, 'settled', now(), now())`
+      );
+      await pruneUsage(pool, { now, apply: true, actorId: "op1" });
+      const { rows } = await pool.query(
+        `SELECT requests, charged_micro_usd::int AS charged FROM usage_monthly
+          WHERE month = '2026-06' AND user_id = 'u1'`
+      );
+      expect(rows).toEqual([{ requests: 3, charged: 50 }]);
     });
   });
 });
