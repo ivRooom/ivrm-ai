@@ -11,6 +11,8 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
+COPY web ./web
+COPY scripts ./scripts
 RUN pnpm build
 
 FROM base AS prod-deps

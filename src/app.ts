@@ -5,8 +5,10 @@ import {
   type AuthEnv,
 } from "./auth/middleware.js";
 import { chatRoutes, type ChatDeps } from "./chat/routes.js";
+import { webHandler, type WebAssets } from "./web.js";
 
-export type AppDeps = { auth: AuthDeps; chat: ChatDeps };
+/** `web` is the built chat UI; without it only the API is served. */
+export type AppDeps = { auth: AuthDeps; chat: ChatDeps; web?: WebAssets };
 
 export function createApp(deps: AppDeps) {
   const app = new Hono();
@@ -27,6 +29,8 @@ export function createApp(deps: AppDeps) {
   });
   api.route("/", chatRoutes(deps.chat));
   app.route("/api", api);
+
+  if (deps.web) app.get("*", webHandler(deps.web));
 
   return app;
 }

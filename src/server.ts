@@ -1,3 +1,5 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { Pool } from "pg";
 import { createApp } from "./app.js";
@@ -16,6 +18,7 @@ import { PostgresAuditLog } from "./db/audit.js";
 import { BedrockChatModel, createConverseClient } from "./models/bedrock.js";
 import { createDefaultCatalog } from "./models/default-catalog.js";
 import { KillSwitch, PostgresKillSwitchStore } from "./ops/kill-switch.js";
+import { loadWebAssets } from "./web.js";
 
 const config = loadConfig();
 const pool = new Pool({ connectionString: config.DATABASE_URL });
@@ -61,6 +64,17 @@ const gate = new CostGate({
   onSettleError: (error) => console.error("cost settle failed", error),
 });
 
+// Built by `pnpm build` (scripts/build-web.mjs) into dist/public. Required in
+// production; in development (`pnpm dev`, run from src/) only the API is served.
+const web = await loadWebAssets(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), "public"),
+  new URL("/auth/discord/login", config.IVRM_API_BASE_URL).toString()
+).catch((error: unknown) => {
+  if (config.NODE_ENV === "production") throw error;
+  console.warn("chat UI not built; serving the API only");
+  return undefined;
+});
+
 const app = createApp({
   auth: {
     verifier: new ApiSessionVerifier(config.IVRM_API_BASE_URL),
@@ -75,6 +89,7 @@ const app = createApp({
     audit: new PostgresAuditLog(pool),
     maxOutputTokens: config.CHAT_MAX_OUTPUT_TOKENS,
   },
+  ...(web ? { web } : {}),
 });
 
 serve({ fetch: app.fetch, port: config.PORT }, (info) => {
