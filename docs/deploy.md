@@ -19,7 +19,7 @@ Compose on the instance -> Caddy (`ai.ivrm.jp` -> `ivrm-ai:3100`).
 | GitHub OIDC role that trusts `ivRooom/ivrm-ai` and may push `ivrm/ai` and send SSM commands to the instance | IAM `ivrm-ai-github-deploy-role` (ivrm-web#584, `ai_deploy_role.tf`); trusts only the `aws-runtime` Environment | applied 2026-10-21 |
 | Repository variables `AWS_ACCOUNT_ID`, `AWS_REGION`, `AWS_ROLE_ARN`, `AWS_ECR_REPOSITORY` (`ivrm/ai`), `AWS_EC2_INSTANCE_ID`; Environment `aws-runtime` (main only) | this repository | not set |
 | SecureString `/ivrm/ai/database-url` (`postgres://…`, `sslmode=verify-full`) | SSM | **blocked: database not ready** |
-| Optional `/ivrm/ai/kill-switch` = `true` refuses every model call | SSM | absent = off |
+| Optional `/ivrm/ai/kill-switch` = `true` refuses every model call, fixed at deploy time (see "Emergency stop") | SSM | absent = off |
 
 ## Release
 
@@ -34,6 +34,34 @@ Compose on the instance -> Caddy (`ai.ivrm.jp` -> `ivrm-ai:3100`).
 Rollback to an older release: run **Deploy** from a revert on `main` (images are
 addressed by commit SHA and kept in ECR; the instance keeps the last image in
 `/opt/ivrm/ai/current-image`).
+
+## Emergency stop (kill switch)
+
+Two switches refuse every model call. Either one being on is enough.
+
+- **Stored switch (no restart)**: the `ops_flags` row `kill_switch`
+  (migration `0002_ops_flags.sql`). The server re-reads it every 5 seconds.
+  Change it from inside the running container; each change is written to
+  `audit_logs` (`ops.kill_switch.on` / `ops.kill_switch.off`) with the actor and
+  reason:
+
+  ```sh
+  docker exec ivrm-ai node dist/ops/kill-switch-cli.js on --actor <who> --reason "<why>"
+  docker exec ivrm-ai node dist/ops/kill-switch-cli.js off --actor <who> --reason "<why>"
+  docker exec ivrm-ai node dist/ops/kill-switch-cli.js status
+  ```
+
+  Running a command on the production instance (SSM or a shell) needs the
+  operator's approval as usual.
+
+- **Deploy-time switch**: SSM `/ivrm/ai/kill-switch` = `true` becomes
+  `AI_KILL_SWITCH=true` at the next Deploy. While it is set, the stored switch
+  cannot turn calls back on.
+
+Fail closed: until the first successful read at start, and whenever the database
+has not answered for 30 seconds, calls are refused. A release with this code
+needs `0002_ops_flags.sql` applied (`run_migrations`); without it every call is
+refused.
 
 ## Limits on the shared host
 

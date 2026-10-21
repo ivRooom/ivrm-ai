@@ -15,6 +15,7 @@ import { PostgresUsageStore } from "./cost/pg-store.js";
 import { PostgresAuditLog } from "./db/audit.js";
 import { BedrockChatModel, createConverseClient } from "./models/bedrock.js";
 import { createDefaultCatalog } from "./models/default-catalog.js";
+import { KillSwitch, PostgresKillSwitchStore } from "./ops/kill-switch.js";
 
 const config = loadConfig();
 const pool = new Pool({ connectionString: config.DATABASE_URL });
@@ -29,6 +30,16 @@ const policy =
       );
 
 const catalog = createDefaultCatalog();
+
+// AI_KILL_SWITCH=true (fixed at deploy) always wins. Otherwise the stored switch
+// is re-read every few seconds, so it can be turned on or off without a restart
+// (src/ops/kill-switch-cli.ts). Unreadable for 30 seconds counts as on.
+const killSwitch = new KillSwitch({
+  store: new PostgresKillSwitchStore(pool),
+  forcedOn: config.AI_KILL_SWITCH,
+  onError: (error) => console.error("kill switch read failed", error),
+});
+await killSwitch.start();
 
 // One Bedrock client per region, created on first use.
 const clients = new Map<string, ReturnType<typeof createConverseClient>>();
@@ -46,7 +57,7 @@ const gate = new CostGate({
   model,
   store: new PostgresUsageStore(pool),
   limits: DEFAULT_LIMITS,
-  killSwitch: () => config.AI_KILL_SWITCH,
+  killSwitch: () => killSwitch.isOn(),
   onSettleError: (error) => console.error("cost settle failed", error),
 });
 
