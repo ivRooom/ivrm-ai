@@ -5,6 +5,7 @@ import {
   type AuthEnv,
 } from "./auth/middleware.js";
 import { chatRoutes, type ChatDeps } from "./chat/routes.js";
+import { adminModelRoutes } from "./models/admin-routes.js";
 import { webHandler, type WebAssets } from "./web.js";
 
 /** `web` is the built chat UI; without it only the API is served. */
@@ -27,6 +28,7 @@ export function createApp(deps: AppDeps) {
       },
     });
   });
+  api.route("/admin", adminModelRoutes(deps.chat.catalog, deps.chat.now));
   api.route("/", chatRoutes(deps.chat));
   app.route("/api", api);
 

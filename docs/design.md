@@ -111,6 +111,9 @@ ivrm-ai は Herta を直接呼ばず、`api.ivrm.jp` に問い合わせる。
 - アクション名: `ai:Use`(利用)、`ai:UseModel`(リソース `ivrm:ai:model/<id>`)、`ai:UseTool`(リソース `ivrm:ai:tool/<name>`)。
 - **2026-10-26 照合:** `ivrm-web/apps/api/src/routes/ai-authorize.ts` に `POST /auth/authorize` は実装済みで `apps/api/src/index.ts` に登録済み。HTTP 200で`allowed`を返し、未ログイン401/非Member403、利用不可/判定失敗時は許可しない。`ivrm-ai/src/auth/policy.ts` はこれを呼ぶ。**実API本番公開・Cloudflare経路・ロールの適用状態のE2Eは別途確認が必要**。テスト用`static-allow`の本番使用は禁止。
 - ツール: 呼び出しはログインユーザーの権限で行う。サービスアカウントで代行しない。
+- 管理画面向けのモデル一覧 `GET /api/admin/models`(#35、2026-10-21 決定): `ai:Use` に加えて、`/auth/me` の `isAdmin`(owner / admin)を必須にする。
+  新しいアクションは足さない。返すのは id・表示名・提供元・呼び出せるか(価格が有効か)だけで、価格・Bedrock のモデル ID・リージョンは返さない。
+  ivrm-web の管理画面からは、ブラウザではなく `api.ivrm.jp` が管理者の cookie を付けてサーバー間で呼ぶ。
 - 監査: 会話の開始、ツール呼び出し、書き込み、コスト精算を、ユーザー ID 付きで記録する。
 
 ## 7. RAG
