@@ -1,6 +1,6 @@
 # ivrm-ai 設計 v0.1
 
-状態: ドラフト(実装前)。決定事項と未決事項を分けて書く。
+状態: **初期設計ドラフトを保持**。2026-10-26時点でM0の認証・Policy判定クライアント、Bedrock Gateway、Cost Gate、会話保存、監査、Kill Switchなどはコードに実装済み。本番Deployment/DB接続の完了は別判定。`README.md` と `docs/deploy.md` を正本として参照し、以下の未実装表現・モデル候補・Cloud状況は当初決定時点の記録とみなす。
 
 ## 1. 目的と非目的
 
@@ -109,9 +109,7 @@ ivrm-ai は Herta を直接呼ばず、`api.ivrm.jp` に問い合わせる。
 - ivrm-ai は、ユーザーの cookie を付けて `api.ivrm.jp` に「`ai:Use` / リソース `ivrm:ai:*` は許可か」を問い合わせる。
   応答は許可 / 拒否と理由のみ。ivrm-ai 側にポリシー本体は持たない。
 - アクション名: `ai:Use`(利用)、`ai:UseModel`(リソース `ivrm:ai:model/<id>`)、`ai:UseTool`(リソース `ivrm:ai:tool/<name>`)。
-- **現状、この判定 API は存在しない**。ivrm-web 側に追加する(別 PR。producer: ivrm-web、consumer: ivrm-ai)。
-  その間、ivrm-ai は判定点をインターフェース(`PolicyDecisionClient`)で抽象化し、
-  判定 API が使えない場合は**拒否**する(fail closed)。固定の許可実装はテスト専用で、本番では有効にできない。
+- **2026-10-26 照合:** `ivrm-web/apps/api/src/routes/ai-authorize.ts` に `POST /auth/authorize` は実装済みで `apps/api/src/index.ts` に登録済み。HTTP 200で`allowed`を返し、未ログイン401/非Member403、利用不可/判定失敗時は許可しない。`ivrm-ai/src/auth/policy.ts` はこれを呼ぶ。**実API本番公開・Cloudflare経路・ロールの適用状態のE2Eは別途確認が必要**。テスト用`static-allow`の本番使用は禁止。
 - ツール: 呼び出しはログインユーザーの権限で行う。サービスアカウントで代行しない。
 - 監査: 会話の開始、ツール呼び出し、書き込み、コスト精算を、ユーザー ID 付きで記録する。
 
@@ -171,15 +169,14 @@ ivrm-ai は Herta を直接呼ばず、`api.ivrm.jp` に問い合わせる。
 
 | 項目                       | メモ                                                                         |
 | -------------------------- | ---------------------------------------------------------------------------- |
-| 判定 API                   | §6。`api.ivrm.jp` に `ai:Use` の判定 API が必要(ivrm-web 側の別 PR)         |
+| 判定 API                   | §6。`POST /auth/authorize` はivrm-web実装・route登録済み。本番疎通/認可E2Eは別確認         |
 | AWS 予算の見直し           | 既存 $67 を上げるか、ai 専用 Budget のみで運用するか                         |
 | 本番 DB のバックアップ方式 | S3 へのダンプ(世代管理)を想定。詳細は別 Issue                              |
 
 ## 12. 次の作業(Issue 化)
 
-1. M0: 認証(cookie 検証)+ ポリシー判定の最小実装
-2. M0: Converse API のモデルアダプタと `models` 設定
-3. M0: コスト関門(事前予約 / 精算 / 上限 / kill switch)
-4. M0: 会話保存と監査ログのスキーマ
-5. ivrm-web: `ai.ivrm.jp` を許可リストへ追加(別リポジトリ)
-6. Terraform: ai 専用 Budget、inference profile、IAM(承認後・別 PR)
+1. M0の現在の実装・TestをCIで確定し、`src/server.ts` と `migrations/` に対するE2E/セキュリティを検証する。
+2. `docs/deploy.md`の未充足条件（SSM DB接続先、Cloudflare route、Runtime反映、GitHub Environment）を本番でread-only照合する。
+3. 公開前に会話・コスト・Kill Switch・認可のnegative testとDB復旧を実証する。
+4. 追加のTerraform Budget/Inference Profile/IAM変更は別PR・明示承認で実行する。
+5. MCP/Agent/RAG/ブラウザ実行は別フェーズとして扱い、未実装機能を公開済みと表示しない。
