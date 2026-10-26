@@ -31,6 +31,8 @@ type State = {
   sending: AbortController | null;
   streaming: string | null;
   notice: string | null;
+  /** Composer text, kept across redraws (and put back when a send is refused). */
+  draft: string;
 };
 
 const state: State = {
@@ -44,6 +46,7 @@ const state: State = {
   modelId: "",
   sending: null,
   streaming: null,
+  draft: "",
   notice: null,
 };
 
@@ -97,6 +100,17 @@ async function openConversation(id: string | null) {
   draw();
 }
 
+/**
+ * Navigation started by the person. A reply still streaming belongs to the
+ * conversation it was sent in, so it is stopped first (not saved, as with the
+ * stop button) instead of being drawn under another conversation.
+ */
+function goTo(id: string | null) {
+  state.sending?.abort();
+  state.draft = "";
+  return openConversation(id);
+}
+
 async function send(text: string) {
   if (state.sending || !text.trim()) return;
   state.notice = null;
@@ -134,15 +148,18 @@ async function send(text: string) {
         failed = describeStreamError(event.code);
       }
     }
-    if (failed) state.notice = failed;
     await openConversation(conversation.id);
     await loadLists();
+    // After the reload, which clears the notice: say why the reply is gone.
+    if (failed) state.notice = failed;
   } catch (error) {
     if (controller.signal.aborted) {
       state.notice = "回答を止めました。止めた回答は保存されません。";
     } else {
-      // A refused send stored nothing: drop the optimistic user message.
+      // A refused send stored nothing: drop the optimistic user message and
+      // give the text back, so it can be shortened or sent again.
       state.current?.messages.pop();
+      state.draft = text;
       showError(error);
     }
   } finally {
@@ -340,7 +357,7 @@ function sidebar() {
           showError(error);
           return;
         }
-        await openConversation(null);
+        await goTo(null);
       }) as EventListener,
     },
     h("option", { value: "" }, "すべての会話"),
@@ -359,7 +376,7 @@ function sidebar() {
     { class: "sidebar" },
     h(
       "button",
-      { class: "primary", onclick: () => void openConversation(null) },
+      { class: "primary", onclick: () => void goTo(null) },
       "新しい会話"
     ),
     h(
@@ -425,7 +442,7 @@ function sidebar() {
                 c.id === state.current?.conversation.id
                   ? "item active"
                   : "item",
-              onclick: () => void openConversation(c.id),
+              onclick: () => void goTo(c.id),
             },
             c.title || "(無題)"
           )
@@ -446,9 +463,14 @@ function chat() {
     placeholder: "メッセージ(Ctrl+Enter で送信)",
     disabled: !!state.sending || conversation?.archived === true,
   });
+  textarea.value = state.draft;
+  textarea.addEventListener("input", () => {
+    state.draft = textarea.value;
+  });
   const submit = () => {
     const text = textarea.value;
     textarea.value = "";
+    state.draft = "";
     void send(text);
   };
   textarea.addEventListener("keydown", (event) => {
@@ -487,7 +509,11 @@ function chat() {
       conversation
         ? h(
             "button",
-            { class: "ghost", onclick: () => void toggleArchive(conversation) },
+            {
+              class: "ghost",
+              disabled: !!state.sending,
+              onclick: () => void toggleArchive(conversation),
+            },
             conversation.archived ? "復元" : "アーカイブ"
           )
         : null
@@ -638,8 +664,5 @@ async function start() {
   await openConversation(conversationIdFromPath());
 }
 
-window.addEventListener(
-  "popstate",
-  () => void openConversation(conversationIdFromPath())
-);
+window.addEventListener("popstate", () => void goTo(conversationIdFromPath()));
 void start();
