@@ -13,8 +13,10 @@ import {
   type Session,
   type SessionVerifier,
 } from "./auth/session.js";
-import { makeChatDeps } from "./chat/test-support.js";
+import { makeChatDeps, SPEC } from "./chat/test-support.js";
 import { loadConfig } from "./config.js";
+import { providerOf } from "./models/admin-routes.js";
+import type { ModelSpec } from "./models/types.js";
 
 const env = { DATABASE_URL: "postgres://x/y" };
 
@@ -33,6 +35,7 @@ const session: Session = {
 function appWith(opts: {
   verify?: SessionVerifier["verify"];
   decision?: Decision;
+  specs?: ModelSpec[];
 }) {
   const verifier: SessionVerifier = {
     verify: opts.verify ?? vi.fn().mockResolvedValue(session),
@@ -45,7 +48,10 @@ function appWith(opts: {
     authorize,
     app: createApp({
       auth: { verifier, policy, allowedOrigin: ORIGIN },
-      chat: makeChatDeps({ policy }).deps,
+      chat: makeChatDeps({
+        policy,
+        ...(opts.specs ? { specs: opts.specs } : {}),
+      }).deps,
     }),
   };
 }
@@ -119,6 +125,58 @@ describe("access control", () => {
     });
     // Passed the origin check; there is no POST route, so Hono answers 404.
     expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/admin/models", () => {
+  const specs: ModelSpec[] = [
+    {
+      ...SPEC,
+      id: "gpt",
+      label: "GPT",
+      bedrockModelId: "openai.gpt-oss-120b-1:0",
+    },
+    {
+      ...SPEC,
+      id: "haiku",
+      label: "Haiku",
+      bedrockModelId: "jp.anthropic.claude-haiku-5-5",
+      pricing: null,
+    },
+  ];
+  const admin = { ...session, isAdmin: true, roles: ["admin"] };
+
+  it("lists the whole catalog for an admin, without prices or Bedrock ids", async () => {
+    const { app } = appWith({ verify: async () => admin, specs });
+    const res = await app.request("/api/admin/models");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      models: [
+        { id: "gpt", label: "GPT", provider: "OpenAI", callable: true },
+        { id: "haiku", label: "Haiku", provider: "Anthropic", callable: false },
+      ],
+    });
+  });
+
+  it("403 for a member who may use ai but is not an admin", async () => {
+    const { app } = appWith({ specs });
+    expect((await app.request("/api/admin/models")).status).toBe(403);
+  });
+
+  it("401 without a session", async () => {
+    const { app } = appWith({ verify: async () => null, specs });
+    expect((await app.request("/api/admin/models")).status).toBe(401);
+  });
+});
+
+describe("providerOf", () => {
+  it.each([
+    ["openai.gpt-oss-120b-1:0", "OpenAI"],
+    ["deepseek.v3-v1:0", "DeepSeek"],
+    ["global.anthropic.claude-sonnet-5-5", "Anthropic"],
+    ["jp.anthropic.claude-haiku-5-5", "Anthropic"],
+  ])("%s -> %s", (bedrockModelId, provider) => {
+    expect(providerOf({ bedrockModelId })).toBe(provider);
   });
 });
 
