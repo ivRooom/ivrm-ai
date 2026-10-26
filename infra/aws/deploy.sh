@@ -68,8 +68,11 @@ load_flag_parameter() {
   printf '%s' "$value"
 }
 
-# A database URL must be postgres:// and verify the server certificate.
+# A database URL must be postgres:// and verify the server certificate against
+# the mounted CA. The query is checked parameter by parameter (a substring
+# match would accept e.g. application_name=sslmode=verify-full).
 check_database_url() {
+  local query param sslmode="" sslrootcert=""
   case "$2" in
     postgres://* | postgresql://*) ;;
     *)
@@ -78,12 +81,34 @@ check_database_url() {
       ;;
   esac
   case "$2" in
-    *sslmode=verify-full*) ;;
-    *)
-      echo "$1 must use sslmode=verify-full" >&2
-      return 1
-      ;;
+    *\?*) query="${2#*\?}" ;;
+    *) query="" ;;
   esac
+  local IFS='&'
+  for param in $query; do
+    case "$param" in
+      sslmode=*)
+        [ -z "$sslmode" ] || sslmode="duplicate"
+        [ "$sslmode" = "duplicate" ] || sslmode="${param#sslmode=}"
+        ;;
+      sslrootcert=*)
+        [ -z "$sslrootcert" ] || sslrootcert="duplicate"
+        [ "$sslrootcert" = "duplicate" ] || sslrootcert="${param#sslrootcert=}"
+        ;;
+      ssl=* | sslcert=* | sslkey=* | uselibpqcompat=*)
+        echo "$1 must not set ${param%%=*}" >&2
+        return 1
+        ;;
+    esac
+  done
+  if [ "$sslmode" != "verify-full" ]; then
+    echo "$1 must use sslmode=verify-full exactly once" >&2
+    return 1
+  fi
+  if [ "$sslrootcert" != "/etc/ivrm-ai/db-ca.crt" ]; then
+    echo "$1 must set sslrootcert=/etc/ivrm-ai/db-ca.crt exactly once" >&2
+    return 1
+  fi
 }
 
 prepare_database_ca() {
@@ -98,6 +123,12 @@ prepare_database_ca() {
   esac
   tmp="$CA_FILE.tmp"
   printf '%s\n' "$ca" > "$tmp"
+  # Keep the previous CA unless the new one parses as a certificate.
+  if ! openssl x509 -in "$tmp" -noout 2> /dev/null; then
+    rm -f "$tmp"
+    echo "database CA parameter is not a valid certificate" >&2
+    return 1
+  fi
   chmod 0644 "$tmp"
   mv -f "$tmp" "$CA_FILE"
 }
