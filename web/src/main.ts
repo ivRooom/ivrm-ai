@@ -79,7 +79,11 @@ async function loadLists() {
   state.conversations = conversations;
 }
 
+/** Bumped by each openConversation, so a slower, older load is dropped. */
+let openSeq = 0;
+
 async function openConversation(id: string | null) {
+  const seq = ++openSeq;
   state.notice = null;
   if (!id) {
     state.current = null;
@@ -88,10 +92,13 @@ async function openConversation(id: string | null) {
     return;
   }
   try {
-    state.current = await api.conversation(id);
-    state.modelId = state.current.conversation.modelId;
+    const current = await api.conversation(id);
+    if (seq !== openSeq) return;
+    state.current = current;
+    state.modelId = current.conversation.modelId;
     navigate(id);
   } catch (error) {
+    if (seq !== openSeq) return;
     state.current = null;
     navigate(null);
     showError(error);
@@ -107,7 +114,7 @@ async function openConversation(id: string | null) {
  */
 function goTo(id: string | null) {
   state.sending?.abort();
-  state.draft = "";
+  if (id !== (state.current?.conversation.id ?? null)) state.draft = "";
   return openConversation(id);
 }
 
@@ -123,6 +130,10 @@ async function send(text: string) {
         modelId: state.modelId,
         projectId: state.projectFilter || null,
       });
+      // Creation cannot be cancelled: if the person moved on meanwhile, the
+      // empty conversation stays in the list but is not opened.
+      if (controller.signal.aborted)
+        throw new DOMException("aborted", "AbortError");
       state.current = { conversation, messages: [] };
       navigate(conversation.id);
     }
