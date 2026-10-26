@@ -19,6 +19,10 @@ services:
     # deploy.sh, mode 0600). It is never part of the compose file or the image.
     env_file:
       - /opt/ivrm/ai/runtime.env
+    # CA of the database server certificate (written by deploy.sh); the
+    # DATABASE_URL sets sslrootcert to this path.
+    volumes:
+      - /opt/ivrm/ai/db-ca.crt:/etc/ivrm-ai/db-ca.crt:ro
     # The host runs five other apps on 2 GB: keep ivrm-ai small so a runaway
     # cannot take production down with it.
     mem_limit: 256m

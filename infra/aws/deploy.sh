@@ -18,6 +18,13 @@ ENV_FILE="$APP_DIR/runtime.env"
 LOCK_FILE="/var/lock/ivrm-ai-deploy.lock"
 CURRENT_IMAGE_FILE="$APP_DIR/current-image"
 DATABASE_URL_PARAMETER="${DATABASE_URL_PARAMETER:-/ivrm/ai/database-url}"
+# Migrations run as the migrator role (DDL); the app gets the runtime role only.
+DATABASE_MIGRATION_URL_PARAMETER="${DATABASE_MIGRATION_URL_PARAMETER:-/ivrm/ai/database-migration-url}"
+# CA of the database server certificate (public). The URLs point sslrootcert at
+# /etc/ivrm-ai/db-ca.crt, where the compose file and the migration run mount it.
+DATABASE_CA_PARAMETER="${DATABASE_CA_PARAMETER:-/ivrm/ai/database-ca-cert}"
+CA_FILE="$APP_DIR/db-ca.crt"
+MIGRATE_ENV_FILE="$APP_DIR/migrate.env"
 KILL_SWITCH_PARAMETER="${KILL_SWITCH_PARAMETER:-/ivrm/ai/kill-switch}"
 
 mkdir -p "$APP_DIR"
@@ -61,16 +68,85 @@ load_flag_parameter() {
   printf '%s' "$value"
 }
 
-prepare_runtime_env() {
-  local database_url kill_switch tmp
-  database_url="$(load_required_parameter "$DATABASE_URL_PARAMETER")"
-  case "$database_url" in
+# A database URL must be postgres:// and verify the server certificate against
+# the mounted CA. The query is checked parameter by parameter (a substring
+# match would accept e.g. application_name=sslmode=verify-full).
+check_database_url() {
+  local query param sslmode="" sslrootcert="" sslmode_count=0 sslrootcert_count=0
+  case "$2" in
     postgres://* | postgresql://*) ;;
     *)
-      echo "database URL must start with postgres:// or postgresql://" >&2
+      echo "$1 must start with postgres:// or postgresql://" >&2
       return 1
       ;;
   esac
+  case "$2" in
+    *\?*) query="${2#*\?}" ;;
+    *) query="" ;;
+  esac
+  local IFS='&'
+  for param in $query; do
+    case "$param" in
+      sslmode=*)
+        sslmode_count=$((sslmode_count + 1))
+        sslmode="${param#sslmode=}"
+        ;;
+      sslrootcert=*)
+        sslrootcert_count=$((sslrootcert_count + 1))
+        sslrootcert="${param#sslrootcert=}"
+        ;;
+      ssl=* | sslcert=* | sslkey=* | uselibpqcompat=*)
+        echo "$1 must not set ${param%%=*}" >&2
+        return 1
+        ;;
+    esac
+  done
+  if [ "$sslmode_count" -ne 1 ] || [ "$sslmode" != "verify-full" ]; then
+    echo "$1 must use sslmode=verify-full exactly once" >&2
+    return 1
+  fi
+  if [ "$sslrootcert_count" -ne 1 ] || [ "$sslrootcert" != "/etc/ivrm-ai/db-ca.crt" ]; then
+    echo "$1 must set sslrootcert=/etc/ivrm-ai/db-ca.crt exactly once" >&2
+    return 1
+  fi
+}
+
+prepare_database_ca() {
+  local ca tmp
+  ca="$(load_required_parameter "$DATABASE_CA_PARAMETER")"
+  case "$ca" in
+    "-----BEGIN CERTIFICATE-----"*) ;;
+    *)
+      echo "database CA parameter is not a PEM certificate" >&2
+      return 1
+      ;;
+  esac
+  tmp="$CA_FILE.tmp"
+  printf '%s\n' "$ca" > "$tmp"
+  # Keep the previous CA unless the new one parses as a certificate.
+  if ! openssl x509 -in "$tmp" -noout 2> /dev/null; then
+    rm -f "$tmp"
+    echo "database CA parameter is not a valid certificate" >&2
+    return 1
+  fi
+  chmod 0644 "$tmp"
+  mv -f "$tmp" "$CA_FILE"
+}
+
+prepare_migration_env() {
+  local migration_url
+  migration_url="$(load_required_parameter "$DATABASE_MIGRATION_URL_PARAMETER")"
+  check_database_url "database migration URL" "$migration_url"
+  umask 077
+  printf 'DATABASE_MIGRATION_URL=%s\n' "$migration_url" > "$MIGRATE_ENV_FILE"
+  chmod 0600 "$MIGRATE_ENV_FILE"
+  unset migration_url
+}
+
+prepare_runtime_env() {
+  local database_url kill_switch tmp
+  database_url="$(load_required_parameter "$DATABASE_URL_PARAMETER")"
+  check_database_url "database URL" "$database_url"
 
   kill_switch="$(load_flag_parameter "$KILL_SWITCH_PARAMETER")"
   if [ "$kill_switch" = "true" ]; then
@@ -114,6 +190,7 @@ assert_local_http_status() {
 
 rollback() {
   local exit_code=$?
+  rm -f "$MIGRATE_ENV_FILE"
   if [[ "$exit_code" -ne 0 ]]; then
     echo "ivrm-ai deployment failed: $IVRM_AI_IMAGE" >&2
     docker ps -a --filter name=ivrm-ai || true
@@ -135,6 +212,7 @@ rollback() {
 }
 trap rollback EXIT
 
+prepare_database_ca
 prepare_runtime_env
 
 aws ecr get-login-password --region "$AWS_REGION" \
@@ -148,8 +226,11 @@ fi
 
 if [[ "$RUN_MIGRATIONS" == "true" ]]; then
   echo "applying migrations"
-  docker run --rm --env-file "$ENV_FILE" --memory 256m "$IVRM_AI_IMAGE" \
+  prepare_migration_env
+  docker run --rm --env-file "$MIGRATE_ENV_FILE" --memory 256m \
+    -v "$CA_FILE:/etc/ivrm-ai/db-ca.crt:ro" "$IVRM_AI_IMAGE" \
     node dist/db/migrate-cli.js
+  rm -f "$MIGRATE_ENV_FILE"
 else
   echo "migrations: skipped (RUN_MIGRATIONS is not true)"
 fi
