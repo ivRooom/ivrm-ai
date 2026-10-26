@@ -80,6 +80,10 @@ jobs:
           # Without a session cookie the API is closed.
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3100/api/me)" = "401"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3100/api/models)" = "401"
+          # The chat UI is served, under its Content-Security-Policy.
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3100/)" = "200"
+          curl --silent --head http://127.0.0.1:3100/ | grep -i "^content-security-policy: default-src 'none'"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3100/assets/app.js)" = "200"
       - name: Logs on failure
         if: failure()
         run: docker logs ivrm-ai || true

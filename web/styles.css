@@ -1,0 +1,264 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --panel: #f5f5f7;
+  --text: #1d1d1f;
+  --muted: #6e6e73;
+  --border: #d2d2d7;
+  --accent: #5865f2;
+  --accent-text: #ffffff;
+  --user: #eef0ff;
+  --notice: #fff4e5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161618;
+    --panel: #1f1f22;
+    --text: #f2f2f4;
+    --muted: #a1a1a6;
+    --border: #3a3a3f;
+    --user: #262a4a;
+    --notice: #3a2e1a;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    15px/1.6 system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Hiragino Sans",
+    "Noto Sans JP",
+    sans-serif;
+}
+button,
+.button,
+select,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button,
+.button {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.primary,
+button[type="submit"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.ghost {
+  background: transparent;
+}
+select,
+input,
+textarea {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 6px 8px;
+  min-width: 0;
+}
+textarea {
+  width: 100%;
+  resize: vertical;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.row.end {
+  justify-content: flex-end;
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+.muted {
+  color: var(--muted);
+}
+.notice {
+  background: var(--notice);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 0 0 12px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+}
+.topbar {
+  grid-column: 1 / -1;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+.sidebar select {
+  flex: 1;
+}
+.sidebar .row button {
+  white-space: nowrap;
+  font-size: 13px;
+}
+.check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+}
+.conversations,
+.plain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.item {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.item.active {
+  background: var(--border);
+}
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px 20px;
+}
+.chat h1 {
+  font-size: 18px;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat header {
+  margin-bottom: 12px;
+}
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.message {
+  max-width: 860px;
+  width: 100%;
+}
+.message .who {
+  font-size: 12px;
+  color: var(--muted);
+}
+.message.user .body {
+  background: var(--user);
+  border-radius: 10px;
+  padding: 8px 12px;
+  white-space: pre-wrap;
+}
+.message .body pre {
+  background: var(--panel);
+  padding: 10px;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.message .body code {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 13px;
+}
+.message .body table {
+  border-collapse: collapse;
+}
+.message .body th,
+.message .body td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+}
+.streaming {
+  white-space: pre-wrap;
+}
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.composer select {
+  max-width: 50%;
+}
+.login {
+  max-width: 480px;
+  margin: 15vh auto;
+  padding: 0 16px;
+}
+.loading {
+  padding: 16px;
+}
+.dialog {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  width: min(560px, 92vw);
+}
+.dialog form,
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dialog:not([open]) {
+  display: none;
+}
+.dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+@media (max-width: 720px) {
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr;
+    height: auto;
+    min-height: 100vh;
+  }
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: 40vh;
+  }
+}
