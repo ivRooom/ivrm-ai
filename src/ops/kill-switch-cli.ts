@@ -35,7 +35,7 @@ if (!url) {
   process.exit(1);
 }
 
-const pool = new Pool({ connectionString: url });
+const pool = new Pool({ connectionString: url, max: 1 });
 const store = new PostgresKillSwitchStore(pool);
 try {
   if (command !== "status") {

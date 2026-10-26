@@ -21,7 +21,14 @@ import { KillSwitch, PostgresKillSwitchStore } from "./ops/kill-switch.js";
 import { loadWebAssets } from "./web.js";
 
 const config = loadConfig();
-const pool = new Pool({ connectionString: config.DATABASE_URL });
+// The database (max_connections 30) is shared with other services; this role may
+// open 8, so the app keeps 5 and leaves room for the CLIs and a deploy overlap.
+const pool = new Pool({
+  connectionString: config.DATABASE_URL,
+  max: 5,
+  connectionTimeoutMillis: 5_000,
+  idleTimeoutMillis: 30_000,
+});
 
 const policy =
   config.AI_POLICY_MODE === "static-allow"

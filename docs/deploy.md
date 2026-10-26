@@ -17,8 +17,10 @@ Compose on the instance -> Caddy (`ai.ivrm.jp` -> `ivrm-ai:3100`).
 | Caddy route `ai.ivrm.jp` | ivrm-web `infra/aws/runtime/Caddyfile` (merged in ivrm-web#581), applied with the `AWS Home Edge` workflow | merged, not applied to the instance |
 | Cloudflare Tunnel public hostname `ai.ivrm.jp` -> `http://localhost:8080` (like the other hosts) | Cloudflare Zero Trust | not done |
 | GitHub OIDC role that trusts `ivRooom/ivrm-ai` and may push `ivrm/ai` and send SSM commands to the instance | IAM `ivrm-ai-github-deploy-role` (ivrm-web#584, `ai_deploy_role.tf`); trusts only the `aws-runtime` Environment | applied 2026-10-21 |
-| Repository variables `AWS_ACCOUNT_ID`, `AWS_REGION`, `AWS_ROLE_ARN`, `AWS_ECR_REPOSITORY` (`ivrm/ai`), `AWS_EC2_INSTANCE_ID`; Environment `aws-runtime` (main only) | this repository | not set |
-| SecureString `/ivrm/ai/database-url` (`postgres://…`, `sslmode=verify-full`) | SSM | **blocked: database not ready** |
+| Repository variables `AWS_ACCOUNT_ID`, `AWS_REGION`, `AWS_ROLE_ARN`, `AWS_ECR_REPOSITORY` (`ivrm/ai`), `AWS_EC2_INSTANCE_ID`; Environment `aws-runtime` (main only) | this repository | set 2026-10-21 |
+| SecureString `/ivrm/ai/database-url`: runtime role `ivrm_ai_runtime` (DML only), `postgres://…@<DB static IP>:5432/ivrm_ai?sslmode=verify-full&sslrootcert=/etc/ivrm-ai/db-ca.crt` | SSM (ivrm-infrastructure `docs/runbooks/postgresql-ai-client-route.md`) | **not created yet** |
+| SecureString `/ivrm/ai/database-migration-url`: migrator role `ivrm_ai_migrator` (DDL), same shape; read only when `run_migrations` is on | SSM (same runbook) | **not created yet** |
+| String `/ivrm/ai/database-ca-cert`: CA of the database server certificate (public), written to `/opt/ivrm/ai/db-ca.crt` and mounted at `/etc/ivrm-ai/db-ca.crt` | SSM (same runbook) | **not created yet** |
 | Optional `/ivrm/ai/kill-switch` = `true` refuses every model call, fixed at deploy time (see "Emergency stop") | SSM | absent = off |
 
 ## Release
