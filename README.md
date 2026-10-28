@@ -18,7 +18,7 @@
 - チャット UI
 - 管理用モデルカタログ API
 
-ただし、モデルの単価が未設定なので(#13)、今はどのモデルも呼べません(fail closed)。Bedrock の実呼び出しの確認は #26 で行います。手順と状態は [`docs/deploy.md`](docs/deploy.md) を見てください。
+呼べるモデルは、単価を確認済みの gpt-oss 120B と DeepSeek V3.2 です(確認日 2026-10-20、有効期限 2026-11-19、`src/models/default-catalog.ts`)。期限を過ぎると、価格を確認し直すまで呼べなくなります(fail closed)。Claude は AWS アカウントで Anthropic のモデルが使えないため、単価を入れていません(#13)。本番での Bedrock の実呼び出しの確認は #26 で行います。手順と状態は [`docs/deploy.md`](docs/deploy.md) を見てください。
 
 ## 開発
 
