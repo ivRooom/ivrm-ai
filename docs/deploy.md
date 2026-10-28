@@ -65,6 +65,22 @@ has not answered for 30 seconds, calls are refused. A release with this code
 needs `0002_ops_flags.sql` applied (`run_migrations`); without it every call is
 refused.
 
+## Usage history (retention)
+
+The cost gate reads only the current month of `usage_reservations` (plus open
+and very recent rows). Older closed rows are summed per month and user into
+`usage_monthly` (migration `0003_usage_monthly.sql`) and deleted, keeping the
+current month and the two before it. Open rows are never touched. Each run
+writes a `usage.prune` audit entry. Per-message cost also stays in `messages`.
+
+```sh
+docker exec ivrm-ai node dist/ops/usage-retention-cli.js                 # report only
+docker exec ivrm-ai node dist/ops/usage-retention-cli.js --apply --actor <who>
+```
+
+`--apply` deletes production rows, so it needs the operator's approval. At the
+current limits (about $15 a month) the table stays small; once a month is enough.
+
 ## Limits on the shared host
 
 - Container limits: 256 MB, 0.5 CPU (`infra/aws/docker-compose.yml`). The host
