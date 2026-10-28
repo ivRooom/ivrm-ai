@@ -40,4 +40,15 @@ LLM 呼び出しは、必ずコスト上限の関門(`docs/design.md` §5)を通
 ## 検証
 
 実際に実行したコマンドだけを報告する。実行していないテスト / ビルドを「通った」と書かない。
-コマンドの正は `package.json` のスクリプト(整備され次第、この節に列挙する)。
+コマンドの正は `package.json` のスクリプト。CI と同じく次を実行する(`lint` script は無い)。
+
+```sh
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm format:check
+pnpm test     # PostgreSQL のテストは TEST_DATABASE_URL(名前に test を含む使い捨て DB)が必要。無いと skip
+pnpm build
+```
+
+`TEST_DATABASE_URL` を付けずに実行した場合は、PostgreSQL のテストが skip されたと報告する。
+`pnpm db:migrate`、`pnpm ops:*` を本番に対して実行するのは承認後のみ(`docs/deploy.md`)。
