@@ -64,43 +64,54 @@ export async function pruneUsage(
       return result;
     }
 
-    // Added to an existing summary row, so a later run (a row closed late)
-    // never overwrites what an earlier run already counted.
-    await client.query(
-      `INSERT INTO usage_monthly
-         (month, user_id, requests, released, charged_micro_usd)
-       SELECT month, user_id,
-              COUNT(*),
-              COUNT(*) FILTER (WHERE status = 'released'),
-              COALESCE(SUM(actual_micro_usd) FILTER (WHERE status = 'settled'), 0)
-         FROM usage_reservations
-        WHERE month < $1 AND status <> 'open'
-        GROUP BY month, user_id
-       ON CONFLICT (month, user_id) DO UPDATE
-         SET requests = usage_monthly.requests + EXCLUDED.requests,
-             released = usage_monthly.released + EXCLUDED.released,
-             charged_micro_usd =
-               usage_monthly.charged_micro_usd + EXCLUDED.charged_micro_usd,
-             updated_at = now()`,
+    // One statement: the rows summarized are exactly the rows deleted, even if
+    // another run or a late settlement changes the table meanwhile. Added to an
+    // existing summary row, so a later run (a row closed late) never overwrites
+    // what an earlier run already counted.
+    const pruned = await client.query<{ month: string; n: string }>(
+      `WITH gone AS (
+         DELETE FROM usage_reservations
+          WHERE month < $1 AND status <> 'open'
+          RETURNING month, user_id, status, actual_micro_usd
+       ), summary AS (
+         INSERT INTO usage_monthly
+           (month, user_id, requests, released, charged_micro_usd)
+         SELECT month, user_id,
+                COUNT(*),
+                COUNT(*) FILTER (WHERE status = 'released'),
+                COALESCE(SUM(actual_micro_usd) FILTER (WHERE status = 'settled'), 0)
+           FROM gone
+          GROUP BY month, user_id
+         ON CONFLICT (month, user_id) DO UPDATE
+           SET requests = usage_monthly.requests + EXCLUDED.requests,
+               released = usage_monthly.released + EXCLUDED.released,
+               charged_micro_usd =
+                 usage_monthly.charged_micro_usd + EXCLUDED.charged_micro_usd,
+               updated_at = now()
+       )
+       SELECT month, COUNT(*) AS n FROM gone GROUP BY month ORDER BY month`,
       [cutoff]
     );
-    const deleted = await client.query(
-      `DELETE FROM usage_reservations WHERE month < $1 AND status <> 'open'`,
-      [cutoff]
-    );
-    if (deleted.rowCount !== result.rows) {
-      throw new Error("usage rows changed during the retention run");
-    }
+    const applied: RetentionResult = {
+      cutoff,
+      rows: pruned.rows.reduce((sum, r) => sum + Number(r.n), 0),
+      months: pruned.rows.map((r) => r.month),
+      applied: true,
+    };
     await client.query(
       `INSERT INTO audit_logs (actor_id, action, resource, detail)
        VALUES ($1, 'usage.prune', 'usage_reservations', $2::jsonb)`,
       [
         options.actorId,
-        JSON.stringify({ cutoff, rows: result.rows, months: result.months }),
+        JSON.stringify({
+          cutoff,
+          rows: applied.rows,
+          months: applied.months,
+        }),
       ]
     );
     await client.query("COMMIT");
-    return { ...result, applied: true };
+    return applied;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;
