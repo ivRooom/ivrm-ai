@@ -19,9 +19,10 @@ if (values.apply && !actor) {
   console.error("--actor is required with --apply");
   process.exit(2);
 }
-const keepMonths = values["keep-months"]
-  ? Number(values["keep-months"])
-  : DEFAULT_KEEP_MONTHS;
+// Only an absent flag means the default: `--keep-months ""` is rejected below.
+const keepMonthsArg = values["keep-months"];
+const keepMonths =
+  keepMonthsArg === undefined ? DEFAULT_KEEP_MONTHS : Number(keepMonthsArg);
 
 const url = process.env["DATABASE_URL"];
 if (!url) {
