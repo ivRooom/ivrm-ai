@@ -27,8 +27,10 @@ const specs: ModelSpec[] = [
   //   Haiku 5.5: Japan profile (Tokyo / Osaka). AWS Price List
   //     (AmazonBedrockFoundationModels, ap-northeast-1, on-demand, regional
   //     "Standard", effective 2026-10-01), read 2026-10-28: input 0.11,
-  //     output 0.55. Long-context requests are billed at 0.55 / 2.75; the
-  //     cost gate uses the standard rate (see #13).
+  //     output 0.55; "Long Context" 0.55 / 2.75 for prompts over 100,000
+  //     tokens (Bedrock model card). Adaptive thinking is on by default and
+  //     would spend the small output budget on hidden reasoning, so it is
+  //     turned off.
   {
     id: "claude-sonnet-5-5",
     label: "Claude Sonnet 5.5",
@@ -45,7 +47,15 @@ const specs: ModelSpec[] = [
     region: "ap-northeast-1",
     maxOutputTokens: 8192,
     supports: { tools: true, reasoning: false, vision: true },
-    pricing: priced(0.11, 0.55, "2026-10-28", "2026-11-27"),
+    pricing: {
+      ...priced(0.11, 0.55, "2026-10-28", "2026-11-27"),
+      longContext: {
+        aboveInputTokens: 100_000,
+        inputPerMTok: 0.55,
+        outputPerMTok: 2.75,
+      },
+    },
+    requestFields: { thinking: { type: "disabled" } },
   },
   // gpt-oss-120b: $0.00018 / 1K input, $0.00073 / 1K output (Tokyo, on-demand).
   // Invoked once through Converse on 2026-10-20: access works.

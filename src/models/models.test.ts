@@ -162,6 +162,38 @@ describe("BedrockChatModel.generate", () => {
     });
   });
 
+  it("passes model-specific request fields to Converse", async () => {
+    const converse = vi.fn().mockResolvedValue({
+      output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+      usage: { inputTokens: 1, outputTokens: 1 },
+      stopReason: "end_turn",
+    });
+    const model = new BedrockChatModel(() => ({
+      converse,
+      converseStream: vi.fn(),
+    }));
+    await model.generate(
+      request({
+        model: { ...priced, requestFields: { thinking: { type: "disabled" } } },
+      })
+    );
+    expect(converse.mock.calls[0]?.[0]).toMatchObject({
+      additionalModelRequestFields: { thinking: { type: "disabled" } },
+    });
+  });
+
+  it("turns off Haiku 5.5's default adaptive thinking", () => {
+    const haiku = createDefaultCatalog()
+      .list()
+      .find((m) => m.id === "claude-haiku-5-5");
+    expect(haiku?.requestFields).toEqual({ thinking: { type: "disabled" } });
+    expect(haiku?.pricing?.longContext).toEqual({
+      aboveInputTokens: 100_000,
+      inputPerMTok: 0.55,
+      outputPerMTok: 2.75,
+    });
+  });
+
   it("rejects maxOutputTokens above the model limit before calling", async () => {
     const converse = vi.fn();
     const model = new BedrockChatModel(() => ({
