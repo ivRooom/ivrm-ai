@@ -7,7 +7,48 @@
 - 将来: Gemini など Bedrock にないモデルは、直接 API として別途検討する(現スコープ外)
 - コスト: 既存 AWS 予算の範囲内。アプリ側の上限を必ず通す(`docs/design.md` §5)
 
-状態（2026-10-26、Repositoryのmainで確認）: **M0のAPI実装と単体テストが存在**。認証/Policy判定クライアント、Bedrock Converse、Cost Gate、PostgreSQL会話保存・利用量・監査、DB migration、Kill Switchがコード化されています。ただし**本番デプロイと専用PGへの接続・Cloudflare経路の成立は未確認／必要条件が残存**します。`docs/deploy.md`を参照してください。
+状態(2026-10-28、Repository と本番で確認): **本番で稼働中**。`ai.ivrm.jp` は Cloudflare Tunnel から EC2 の Caddy、さらに `ivrm-ai` コンテナへつながっています。専用 PostgreSQL へは TLS(verify-full)で接続します。migration は `0002` まで適用済みです。実装済みの範囲は次のとおりです。
+
+- 認証/Policy 判定クライアント
+- Bedrock Converse
+- Cost Gate
+- PostgreSQL への会話・利用量・監査の保存
+- Kill Switch
+- 使用量の月次集計(`0003`)
+- チャット UI
+- 管理用モデルカタログ API
+
+ただし、モデルの単価が未設定なので(#13)、今はどのモデルも呼べません(fail closed)。Bedrock の実呼び出しの確認は #26 で行います。手順と状態は [`docs/deploy.md`](docs/deploy.md) を見てください。
+
+## 開発
+
+Node.js 22 と pnpm を使います(`packageManager` を参照)。
+
+```sh
+pnpm install --frozen-lockfile
+pnpm typecheck      # サーバーと web/ の型検査
+pnpm format:check   # Prettier
+pnpm test           # Vitest。TEST_DATABASE_URL が無いと PostgreSQL のテストは skip
+pnpm build          # dist/(サーバー)と dist/public(web)
+```
+
+CI(`.github/workflows/ci.yml`)では、上の 4 つを PostgreSQL 17 つきで実行します。続けて本番イメージの build・migrate・起動を確認します。この repository に `lint` script はありません。
+
+### PostgreSQL のテスト
+
+`src/db/postgres.test.ts` は、`TEST_DATABASE_URL` のデータベースの `public` schema を毎回作り直します。そのため、名前に `test` を含むデータベースにしか接続しません。使い捨ての PostgreSQL を使ってください。
+
+```sh
+docker run -d --rm --name ivrm-ai-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=ivrm_ai_test -p 55432:5432 postgres:17-alpine
+TEST_DATABASE_URL=postgres://postgres:test@127.0.0.1:55432/ivrm_ai_test pnpm test
+docker rm -f ivrm-ai-pg
+```
+
+### 実行時の設定と運用コマンド
+
+- サーバーの設定は `src/config.ts` が検証します。必須は `DATABASE_URL` です。本番では `AI_POLICY_MODE=api` 以外を拒否します。
+- `pnpm db:migrate`(`dist/db/migrate-cli.js`)は、`DATABASE_MIGRATION_URL` を優先して使い、無ければ `DATABASE_URL` を使います。サーバー起動時には実行されません。
+- `pnpm ops:kill-switch` と `pnpm ops:usage-retention` は運用 CLI です。本番での使い方と、承認が必要な操作は `docs/deploy.md` にあります。
 
 ## ドキュメント
 
