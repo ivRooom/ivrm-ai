@@ -84,16 +84,17 @@ describe("default catalog", () => {
         .listCallable(now)
         .map((m) => [m.id, m.pricing.inputPerMTok, m.pricing.outputPerMTok])
     ).toEqual([
+      ["claude-haiku-5-5", 0.11, 0.55],
       ["gpt-oss-120b", 0.18, 0.73],
       ["deepseek-v3-2", 0.74, 2.22],
     ]);
   });
 
-  it("refuses the Claude models until access is granted", () => {
+  it("refuses Sonnet 5.5, which has only a global profile in Tokyo", () => {
     const catalog = createDefaultCatalog();
-    for (const id of ["claude-sonnet-5-5", "claude-haiku-5-5"]) {
-      expect(codeOf(() => catalog.resolve(id, now))).toBe("price_unverified");
-    }
+    expect(codeOf(() => catalog.resolve("claude-sonnet-5-5", now))).toBe(
+      "price_unverified"
+    );
   });
 
   it("invokes Claude through inference profiles, not the plain model id", () => {
@@ -109,9 +110,12 @@ describe("default catalog", () => {
   it("stops offering a model once its verified price is stale", () => {
     const catalog = createDefaultCatalog();
     expect(catalog.listCallable(new Date("2026-11-19T23:59:59Z"))).toHaveLength(
-      2
+      3
     );
-    expect(catalog.listCallable(new Date("2026-11-20T00:00:00Z"))).toEqual([]);
+    expect(
+      catalog.listCallable(new Date("2026-11-20T00:00:00Z")).map((m) => m.id)
+    ).toEqual(["claude-haiku-5-5"]);
+    expect(catalog.listCallable(new Date("2026-11-28T00:00:00Z"))).toEqual([]);
     expect(
       codeOf(() =>
         catalog.resolve("gpt-oss-120b", new Date("2026-11-20T00:00:00Z"))
@@ -155,6 +159,38 @@ describe("BedrockChatModel.generate", () => {
       system: [{ text: "be brief" }],
       messages: [{ role: "user", content: [{ text: "hi" }] }],
       inferenceConfig: { maxTokens: 100, temperature: 0.2 },
+    });
+  });
+
+  it("passes model-specific request fields to Converse", async () => {
+    const converse = vi.fn().mockResolvedValue({
+      output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+      usage: { inputTokens: 1, outputTokens: 1 },
+      stopReason: "end_turn",
+    });
+    const model = new BedrockChatModel(() => ({
+      converse,
+      converseStream: vi.fn(),
+    }));
+    await model.generate(
+      request({
+        model: { ...priced, requestFields: { thinking: { type: "disabled" } } },
+      })
+    );
+    expect(converse.mock.calls[0]?.[0]).toMatchObject({
+      additionalModelRequestFields: { thinking: { type: "disabled" } },
+    });
+  });
+
+  it("turns off Haiku 5.5's default adaptive thinking", () => {
+    const haiku = createDefaultCatalog()
+      .list()
+      .find((m) => m.id === "claude-haiku-5-5");
+    expect(haiku?.requestFields).toEqual({ thinking: { type: "disabled" } });
+    expect(haiku?.pricing?.longContext).toEqual({
+      aboveInputTokens: 100_000,
+      inputPerMTok: 0.55,
+      outputPerMTok: 2.75,
     });
   });
 

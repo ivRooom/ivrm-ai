@@ -4,16 +4,20 @@ const encoder = new TextEncoder();
 
 /** Cost in integer micro-USD. USD per 1M tokens equals micro-USD per token. */
 export function costMicroUsd(pricing: ModelPricing, usage: Usage): number {
+  const long = pricing.longContext;
+  const rates =
+    long && usage.inputTokens > long.aboveInputTokens ? long : pricing;
   return Math.ceil(
-    usage.inputTokens * pricing.inputPerMTok +
-      usage.outputTokens * pricing.outputPerMTok
+    usage.inputTokens * rates.inputPerMTok +
+      usage.outputTokens * rates.outputPerMTok
   );
 }
 
 /**
  * Conservative upper bound reserved before the call. The input size uses the
  * UTF-8 byte length as the token count (a token is never shorter than a byte),
- * and the output uses the full maxOutputTokens.
+ * and the output uses the full maxOutputTokens. The byte count also picks the
+ * long-context rate whenever the real token count could exceed its threshold.
  */
 export function reserveMicroUsd(
   pricing: ModelPricing,

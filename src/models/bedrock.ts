@@ -125,6 +125,12 @@ function toConverseInput(request: GenerateRequest): ConverseCommandInput {
         ? { temperature: request.temperature }
         : {}),
     },
+    ...(request.model.requestFields
+      ? {
+          additionalModelRequestFields: request.model
+            .requestFields as ConverseCommandInput["additionalModelRequestFields"],
+        }
+      : {}),
   };
 }
 

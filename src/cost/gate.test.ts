@@ -101,6 +101,26 @@ describe("estimate", () => {
     });
     expect(amount).toBe(3 * 1 + 10 * 2);
   });
+
+  it("bills the whole request at the long-context rate above its threshold", () => {
+    const pricing = {
+      ...spec.pricing!,
+      longContext: { aboveInputTokens: 5, inputPerMTok: 10, outputPerMTok: 20 },
+    };
+    expect(costMicroUsd(pricing, { inputTokens: 5, outputTokens: 1 })).toBe(
+      5 * 1 + 1 * 2
+    );
+    expect(costMicroUsd(pricing, { inputTokens: 6, outputTokens: 1 })).toBe(
+      6 * 10 + 1 * 20
+    );
+    // Two "あ" are 6 bytes: the reservation assumes the long-context rate.
+    expect(
+      reserveMicroUsd(pricing, {
+        messages: [{ role: "user", text: "ああ" }],
+        maxOutputTokens: 1,
+      })
+    ).toBe(6 * 10 + 1 * 20);
+  });
 });
 
 describe("CostGate.generate", () => {

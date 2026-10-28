@@ -9,27 +9,28 @@ import type { ModelPricing, ModelSpec } from "./types.js";
 const CHECKED_AT = "2026-10-20";
 const VALID_UNTIL = "2026-11-19";
 
-function priced(inputPerMTok: number, outputPerMTok: number): ModelPricing {
-  return {
-    inputPerMTok,
-    outputPerMTok,
-    checkedAt: CHECKED_AT,
-    validUntil: VALID_UNTIL,
-  };
+function priced(
+  inputPerMTok: number,
+  outputPerMTok: number,
+  checkedAt = CHECKED_AT,
+  validUntil = VALID_UNTIL
+): ModelPricing {
+  return { inputPerMTok, outputPerMTok, checkedAt, validUntil };
 }
 
 const specs: ModelSpec[] = [
-  // Claude: invoked through an inference profile (the plain model id cannot be
-  // invoked). Not offered yet: the AWS account has no access to the Anthropic
-  // models ("not available for this account", checked 2026-10-20), which needs
-  // the Bedrock use-case form / subscription by an account owner (#13).
-  // Verified prices, to be enabled together with the access:
-  //   Sonnet 5.5, global profile (standard, Global): input 2.00, output 10.00;
-  //     the regional "Standard" rate is 2.20 / 11.00, use that to stay on the
-  //     safe side. Only a global profile exists for Tokyo (data may leave Japan).
-  //   Haiku 5.5, Japan profile (Standard, Tokyo): input 0.11, output 0.55.
-  //   Long-context requests cost more (Haiku: input 0.50, output 2.50 global);
-  //   keep inputs far below the long-context threshold.
+  // Claude: invoked through an inference profile (Anthropic models have no
+  // on-demand access by plain model id).
+  //   Sonnet 5.5: not offered. Tokyo has only the global profile, so inference
+  //     may run outside Japan; enabling it needs that decision (#13). Price
+  //     (us-east-1 list, 2026-10-01): global 2.00 / 10.00, regional 2.20 / 11.00.
+  //   Haiku 5.5: Japan profile (Tokyo / Osaka). AWS Price List
+  //     (AmazonBedrockFoundationModels, ap-northeast-1, on-demand, regional
+  //     "Standard", effective 2026-10-01), read 2026-10-28: input 0.11,
+  //     output 0.55; "Long Context" 0.55 / 2.75 for prompts over 100,000
+  //     tokens (Bedrock model card). Adaptive thinking is on by default and
+  //     would spend the small output budget on hidden reasoning, so it is
+  //     turned off.
   {
     id: "claude-sonnet-5-5",
     label: "Claude Sonnet 5.5",
@@ -46,7 +47,15 @@ const specs: ModelSpec[] = [
     region: "ap-northeast-1",
     maxOutputTokens: 8192,
     supports: { tools: true, reasoning: false, vision: true },
-    pricing: null,
+    pricing: {
+      ...priced(0.11, 0.55, "2026-10-28", "2026-11-27"),
+      longContext: {
+        aboveInputTokens: 100_000,
+        inputPerMTok: 0.55,
+        outputPerMTok: 2.75,
+      },
+    },
+    requestFields: { thinking: { type: "disabled" } },
   },
   // gpt-oss-120b: $0.00018 / 1K input, $0.00073 / 1K output (Tokyo, on-demand).
   // Invoked once through Converse on 2026-10-20: access works.
