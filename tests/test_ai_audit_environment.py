@@ -12,8 +12,7 @@ def valid():
     return {
         "name":"aws-ai-audit",
         "deployment_branch_policy":{"protected_branches":False,"custom_branch_policies":True},
-        "protection_rules":[{"type":"required_reviewers","prevent_self_review":True,
-                             "reviewers":[{"type":"User","reviewer":{"id":123,"login":"reviewer"}}]}],
+        "protection_rules":[],
         "can_admins_bypass":False,
     }, {"total_count":1,"branch_policies":[{"name":"main","type":"branch"}]}
 
@@ -52,11 +51,28 @@ class AuditEnvironmentGateTests(unittest.TestCase):
         b["total_count"]=2
         self.assertIn("incomplete_or_unexpected_branch_policy_count",mod.evaluate(e,b)[0])
 
-    def test_reject_no_or_self_review(self):
-        for rules in ([],[{"type":"branch_policy"}],[{"type":"required_reviewers","reviewers":[],
+    def test_solo_mode_does_not_claim_independent_review(self):
+        e,b=valid()
+        errors,report=mod.evaluate(e,b)
+        self.assertEqual(errors,[])
+        self.assertEqual(report["independent_review"],"NOT_CONFIGURED_SOLO")
+        self.assertEqual(report["aws_role_and_trust"],"NOT_VERIFIED")
+
+    def test_valid_optional_real_reviewer_mode(self):
+        e,b=valid()
+        e["protection_rules"]=[{"type":"required_reviewers","prevent_self_review":True,
+            "reviewers":[{"type":"User","reviewer":{"id":123,"login":"reviewer"}}]}]
+        errors,report=mod.evaluate(e,b)
+        self.assertEqual(errors,[])
+        self.assertEqual(report["independent_review"],"PROTECTED")
+
+    def test_reject_misconfigured_optional_reviewer(self):
+        for rules in ([{"type":"required_reviewers","reviewers":[],
                                                          "prevent_self_review":True}],
                       [{"type":"required_reviewers","reviewers":[{"type":"User","reviewer":{"id":1}}],
-                        "prevent_self_review":False}]):
+                        "prevent_self_review":False}],
+                      [{"type":"required_reviewers","reviewers":[{"type":"User","reviewer":{"id":1}}],
+                        "prevent_self_review":True}]*2):
             e,b=valid()
             e["protection_rules"]=rules
             self.assertTrue(mod.evaluate(e,b)[0])
