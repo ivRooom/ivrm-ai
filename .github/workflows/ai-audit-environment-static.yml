@@ -1,0 +1,26 @@
+name: AI audit Environment offline preflight checks
+
+on:
+  pull_request:
+    paths:
+      - "scripts/check-ai-audit-environment.py"
+      - "tests/test_ai_audit_environment.py"
+      - "docs/runbooks/ai-audit-environment-protection.md"
+      - ".github/workflows/ai-audit-environment-static.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-audit-environment-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test fail-closed environment policy validator
+        run: |
+          python3 -m py_compile scripts/check-ai-audit-environment.py
+          python3 -m unittest discover -s tests -p 'test_ai_audit_environment.py' -v
+      # This job reads no live environment, requests no OIDC token, and cannot deploy.
