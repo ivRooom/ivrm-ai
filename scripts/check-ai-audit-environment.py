@@ -40,25 +40,31 @@ def evaluate(environment, branch_policies):
             # A partial API page must never be mistaken for an exhaustive read.
             errors.append("incomplete_or_unexpected_branch_policy_count")
     rules = environment.get("protection_rules")
-    reviewer = None
     if not isinstance(rules, list):
         errors.append("missing_protection_rules")
     else:
         matches = [x for x in rules if isinstance(x, dict) and x.get("type") == "required_reviewers"]
-        if len(matches) != 1:
-            errors.append("independent_reviewer_gate_missing")
+        if len(matches) > 1:
+            errors.append("duplicate_reviewer_rules")
+        elif not matches:
+            # Solo-maintainer mode is intentionally reviewerless, not independently approved.
+            result["independent_review"] = "NOT_CONFIGURED_SOLO"
         else:
             reviewer = matches[0]
-    if reviewer is not None:
-        listed = reviewer.get("reviewers")
-        if not isinstance(listed, list) or not listed:
-            errors.append("no_required_reviewer")
-        if reviewer.get("prevent_self_review") is not True:
-            errors.append("self_review_not_blocked")
-        if not any(x.get("type") in ("User", "Team") and isinstance(x.get("reviewer"), dict) for x in listed or [] if isinstance(x, dict)):
-            errors.append("reviewer_configuration_invalid")
-        if not errors or not any(x.startswith(("independent_reviewer", "no_required_reviewer", "self_review", "reviewer_configuration")) for x in errors):
-            result["independent_review"] = "PROTECTED"
+            listed = reviewer.get("reviewers")
+            if not isinstance(listed, list) or not listed:
+                errors.append("no_required_reviewer")
+            if reviewer.get("prevent_self_review") is not True:
+                errors.append("self_review_not_blocked")
+            if not isinstance(listed, list) or not any(
+                isinstance(x, dict) and x.get("type") in ("User", "Team")
+                and isinstance(x.get("reviewer"), dict) for x in listed
+            ):
+                errors.append("reviewer_configuration_invalid")
+            if not any(e in errors for e in (
+                "no_required_reviewer", "self_review_not_blocked", "reviewer_configuration_invalid"
+            )):
+                result["independent_review"] = "PROTECTED"
     if environment.get("can_admins_bypass") is not False:
         errors.append("administrators_can_bypass_or_state_not_verifiable")
     if environment.get("wait_timer", 0) not in (0, None):
