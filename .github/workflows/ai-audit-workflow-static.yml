@@ -6,6 +6,9 @@ on:
       - ".github/workflows/ai-audit-readonly.yml"
       - ".github/workflows/ai-audit-workflow-static.yml"
       - "tests/test_ai_audit_workflow.py"
+      - "scripts/check-ai-audit-environment.py"
+      - "tests/test_ai_audit_environment.py"
+      - "docs/runbooks/ai-audit-environment-protection.md"
 
 permissions:
   contents: read
@@ -20,4 +23,6 @@ jobs:
           persist-credentials: false
       - name: Deny production mutation, secret output and unprotected OIDC
         run: python3 -m unittest discover -s tests -p 'test_ai_audit_workflow.py' -v
+      - name: Offline GitHub Environment protection negative tests
+        run: python3 -m unittest discover -s tests -p 'test_ai_audit_environment.py' -v
       # No AWS tokens or credentials are requested on PRs.
