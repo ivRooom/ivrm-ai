@@ -7,6 +7,15 @@ export type ModelPricing = {
   checkedAt: string;
   /** Last date (YYYY-MM-DD, inclusive) the price may be relied on. */
   validUntil: string;
+  /**
+   * Higher rates the provider bills for the whole request once its input
+   * exceeds `aboveInputTokens` (long-context pricing).
+   */
+  longContext?: {
+    aboveInputTokens: number;
+    inputPerMTok: number;
+    outputPerMTok: number;
+  };
 };
 
 export type ModelSpec = {
@@ -20,6 +29,8 @@ export type ModelSpec = {
   supports: { tools: boolean; reasoning: boolean; vision: boolean };
   /** Null until verified. A model without a valid price is never callable. */
   pricing: ModelPricing | null;
+  /** Model-specific fields passed as Converse `additionalModelRequestFields`. */
+  requestFields?: Record<string, unknown>;
 };
 
 export type ChatMessage = {
