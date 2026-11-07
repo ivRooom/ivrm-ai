@@ -127,6 +127,7 @@ async function goTo(id: string | null) {
   }
 }
 
+/** Create a conversation if needed, then send and stream one user message. */
 async function send(text: string) {
   if (state.sending || !text.trim()) return;
   state.notice = null;
@@ -358,6 +359,7 @@ function messageView(message: { role: string; content: string }) {
   );
 }
 
+/** Update streamed text in place and keep the conversation pinned to the latest output. */
 function drawStreaming() {
   const el = document.getElementById("streaming");
   if (!el || state.streaming === null) return;
@@ -366,6 +368,7 @@ function drawStreaming() {
   if (messages) messages.scrollTop = messages.scrollHeight;
 }
 
+/** Render the project controls, history filters, and existing conversation list. */
 function sidebar() {
   const projectSelect = h(
     "select",
@@ -521,6 +524,7 @@ function sidebar() {
   );
 }
 
+/** Render the active conversation, empty state, and accessible message composer. */
 function chat() {
   const conversation = state.current?.conversation ?? null;
   const textarea = h("textarea", {
@@ -744,6 +748,7 @@ function loginView() {
   );
 }
 
+/** Apply drawer visibility and keyboard interactivity without rebuilding the workspace. */
 function syncSidebarMode() {
   const mobile = window.matchMedia("(max-width: 900px)").matches;
   const layout = root.querySelector<HTMLElement>(".layout");
@@ -757,15 +762,22 @@ function syncSidebarMode() {
   chatMain.toggleAttribute("inert", mobile && state.sidebarOpen);
 }
 
+/** Toggle mobile navigation in place so conversation scroll and draft selection survive. */
 function setSidebarOpen(open: boolean) {
   state.sidebarOpen = open;
-  draw();
-  const target = root.querySelector<HTMLElement>(
-    open ? ".sidebar .new-chat" : ".menu-toggle"
+  syncSidebarMode();
+  const toggle = root.querySelector<HTMLButtonElement>(".menu-toggle");
+  toggle?.setAttribute("aria-expanded", String(open));
+  toggle?.setAttribute(
+    "aria-label",
+    open ? "ナビゲーションを閉じる" : "ナビゲーションを開く"
   );
-  target?.focus();
+  root
+    .querySelector<HTMLElement>(open ? ".sidebar .new-chat" : ".menu-toggle")
+    ?.focus();
 }
 
+/** Rebuild the application view after data changes and scroll messages to the end. */
 function draw() {
   if (!state.me) {
     root.replaceChildren(loginView());
@@ -822,6 +834,7 @@ window.addEventListener("keydown", (event) => {
   if (
     event.key === "Escape" &&
     state.sidebarOpen &&
+    !document.querySelector("dialog[open]") &&
     window.matchMedia("(max-width: 900px)").matches
   ) {
     setSidebarOpen(false);

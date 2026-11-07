@@ -10,7 +10,7 @@ export type ComposerKeyEvent = Pick<
 export function shouldSubmitComposer(event: ComposerKeyEvent): boolean {
   return (
     event.key === "Enter" &&
-    !event.shiftKey &&
+    (!event.shiftKey || event.ctrlKey || event.metaKey) &&
     !event.isComposing &&
     event.keyCode !== 229
   );

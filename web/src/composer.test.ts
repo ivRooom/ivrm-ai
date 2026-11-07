@@ -14,7 +14,7 @@ function key(values: Partial<Parameters<typeof shouldSubmitComposer>[0]> = {}) {
 }
 
 describe("shouldSubmitComposer", () => {
-  it("submits on Enter and keeps Ctrl/Cmd+Enter compatible", () => {
+  it("submits on Enter", () => {
     expect(shouldSubmitComposer(key())).toBe(true);
   });
 
@@ -25,6 +25,15 @@ describe("shouldSubmitComposer", () => {
 
   it("leaves Shift+Enter for a newline", () => {
     expect(shouldSubmitComposer(key({ shiftKey: true }))).toBe(false);
+  });
+
+  it("keeps Ctrl/Cmd+Shift+Enter compatible", () => {
+    expect(shouldSubmitComposer(key({ shiftKey: true, ctrlKey: true }))).toBe(
+      true
+    );
+    expect(shouldSubmitComposer(key({ shiftKey: true, metaKey: true }))).toBe(
+      true
+    );
   });
 
   it("does not submit while an IME composition is active", () => {
