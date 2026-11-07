@@ -120,7 +120,8 @@ async function goTo(id: string | null) {
   if (id !== (state.current?.conversation.id ?? null)) state.draft = "";
   const restoreFocus =
     state.sidebarOpen && window.matchMedia("(max-width: 900px)").matches;
-  state.sidebarOpen = false;
+  if (restoreFocus) setSidebarOpen(false);
+  else state.sidebarOpen = false;
   await openConversation(id);
   if (restoreFocus && !state.sidebarOpen) {
     root.querySelector<HTMLElement>(".menu-toggle")?.focus();
