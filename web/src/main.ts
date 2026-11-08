@@ -531,7 +531,10 @@ function sidebar() {
 
 /** Resize the composer for wrapped text in browsers without field-sizing support. */
 function resizeComposer(textarea: HTMLTextAreaElement) {
-  if (CSS.supports("field-sizing", "content")) return;
+  if (CSS.supports("field-sizing", "content")) {
+    textarea.style.height = "";
+    return;
+  }
   const style = getComputedStyle(textarea);
   const lineHeight = Number.parseFloat(style.lineHeight);
   const verticalPadding =
@@ -544,6 +547,12 @@ function resizeComposer(textarea: HTMLTextAreaElement) {
     verticalPadding,
     minHeight
   );
+  textarea.style.height = "auto";
+  const contentHeight = Math.max(
+    minHeight,
+    Math.min(textarea.scrollHeight, lineHeight * 6 + verticalPadding)
+  );
+  textarea.style.height = `${contentHeight}px`;
 }
 
 /** Render the active conversation, empty state, and accessible message composer. */
