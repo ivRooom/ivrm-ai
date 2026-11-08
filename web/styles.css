@@ -574,6 +574,7 @@ select {
   border: 1px solid color-mix(in srgb, var(--accent) 9%, transparent);
   border-radius: 17px 17px 5px 17px;
   background: var(--user);
+  white-space: pre-wrap;
 }
 
 .message.assistant .body > :first-child {
