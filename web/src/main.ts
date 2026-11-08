@@ -122,12 +122,18 @@ async function openConversation(id: string | null) {
 async function goTo(id: string | null) {
   state.sending?.abort();
   if (id !== (state.current?.conversation.id ?? null)) state.draft = "";
+  const navigationSeq = openSeq + 1;
   const restoreFocus =
     state.sidebarOpen && window.matchMedia("(max-width: 900px)").matches;
   if (restoreFocus) setSidebarOpen(false);
   else state.sidebarOpen = false;
   await openConversation(id);
-  if (restoreFocus && !state.sidebarOpen) {
+  if (
+    restoreFocus &&
+    openSeq === navigationSeq &&
+    !state.sidebarOpen &&
+    document.activeElement === document.body
+  ) {
     root.querySelector<HTMLElement>(".menu-toggle")?.focus();
   }
 }
@@ -568,7 +574,6 @@ function chat() {
     disabled: !!state.sending || conversation?.archived === true,
   });
   textarea.value = state.draft;
-  resizeComposer(textarea);
 
   const modelSelect = h(
     "select",
@@ -857,6 +862,9 @@ function draw() {
     )
   );
   syncSidebarMode();
+  const attachedTextarea =
+    root.querySelector<HTMLTextAreaElement>("#composer-input");
+  if (attachedTextarea) resizeComposer(attachedTextarea);
   const messages = root.querySelector<HTMLElement>(".messages");
   if (messages) messages.scrollTop = messages.scrollHeight;
 }
