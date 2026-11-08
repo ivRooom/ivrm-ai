@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { shouldSubmitComposer } from "./composer.js";
+import {
+  canSubmitComposer,
+  composerRowsForContent,
+  shouldSubmitComposer,
+} from "./composer.js";
 
 function key(values: Partial<Parameters<typeof shouldSubmitComposer>[0]> = {}) {
   return {
@@ -12,6 +16,27 @@ function key(values: Partial<Parameters<typeof shouldSubmitComposer>[0]> = {}) {
     ...values,
   };
 }
+
+describe("canSubmitComposer", () => {
+  it("requires non-empty text and an available selected model", () => {
+    expect(canSubmitComposer("hello", "model-a", true)).toBe(true);
+    expect(canSubmitComposer("  ", "model-a", true)).toBe(false);
+    expect(canSubmitComposer("hello", "", true)).toBe(false);
+    expect(canSubmitComposer("hello", "model-a", false)).toBe(false);
+  });
+});
+
+describe("composerRowsForContent", () => {
+  it("grows for wrapped content and respects minimum and maximum rows", () => {
+    expect(composerRowsForContent(33, 22, 11, 38)).toBe(1);
+    expect(composerRowsForContent(55, 22, 11, 38)).toBe(2);
+    expect(composerRowsForContent(165, 22, 11, 38)).toBe(6);
+  });
+
+  it("falls back to one row for invalid measurements", () => {
+    expect(composerRowsForContent(100, 0, 11, 38)).toBe(1);
+  });
+});
 
 describe("shouldSubmitComposer", () => {
   it("submits on Enter", () => {

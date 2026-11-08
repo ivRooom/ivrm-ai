@@ -11,7 +11,11 @@ import {
   type Project,
 } from "./api.js";
 import { h } from "./dom.js";
-import { shouldSubmitComposer } from "./composer.js";
+import {
+  canSubmitComposer,
+  composerRowsForContent,
+  shouldSubmitComposer,
+} from "./composer.js";
 import { createRenderer } from "./markdown.js";
 
 const render = createRenderer(window);
@@ -525,6 +529,23 @@ function sidebar() {
   );
 }
 
+/** Resize the composer for wrapped text in browsers without field-sizing support. */
+function resizeComposer(textarea: HTMLTextAreaElement) {
+  if (CSS.supports("field-sizing", "content")) return;
+  const style = getComputedStyle(textarea);
+  const lineHeight = Number.parseFloat(style.lineHeight);
+  const verticalPadding =
+    Number.parseFloat(style.paddingTop) +
+    Number.parseFloat(style.paddingBottom);
+  const minHeight = Number.parseFloat(style.minHeight);
+  textarea.rows = composerRowsForContent(
+    textarea.scrollHeight,
+    lineHeight,
+    verticalPadding,
+    minHeight
+  );
+}
+
 /** Render the active conversation, empty state, and accessible message composer. */
 function chat() {
   const conversation = state.current?.conversation ?? null;
@@ -538,6 +559,7 @@ function chat() {
     disabled: !!state.sending || conversation?.archived === true,
   });
   textarea.value = state.draft;
+  resizeComposer(textarea);
 
   const modelSelect = h(
     "select",
@@ -554,20 +576,22 @@ function chat() {
     )
   );
 
+  const modelAvailable = () =>
+    canSubmitComposer(state.draft, state.modelId, state.models.length > 0);
   const sendButton = h(
     "button",
     {
       type: "submit",
       class: "send-button",
       "aria-label": "メッセージを送信",
-      disabled:
-        !!state.sending || state.models.length === 0 || !state.draft.trim(),
+      disabled: !!state.sending || !modelAvailable(),
     },
     h("span", { "aria-hidden": "true" }, "↑")
   );
   const submit = () => {
     const text = textarea.value;
-    if (!text.trim()) return;
+    if (!canSubmitComposer(text, state.modelId, state.models.length > 0))
+      return;
     textarea.value = "";
     state.draft = "";
     sendButton.disabled = true;
@@ -585,10 +609,8 @@ function chat() {
   };
   textarea.addEventListener("input", () => {
     state.draft = textarea.value;
-    // Also grow by explicit newlines in browsers without field-sizing support.
-    textarea.rows = Math.min(6, Math.max(1, textarea.value.split("\n").length));
-    sendButton.disabled =
-      !!state.sending || state.models.length === 0 || !state.draft.trim();
+    resizeComposer(textarea);
+    sendButton.disabled = !!state.sending || !modelAvailable();
   });
   textarea.addEventListener("keydown", (event) => {
     if (shouldSubmitComposer(event)) {
