@@ -103,7 +103,11 @@ it("connects rename, title search, original-text copy and theme settings to the 
   expect(document.querySelector<HTMLElement>(".search-empty")?.hidden).toBe(
     false
   );
-  button("表示設定・ショートカット").click();
+  document
+    .querySelector<HTMLButtonElement>(
+      'button[aria-label="表示設定・ショートカット"]'
+    )!
+    .click();
   const theme = document.querySelector<HTMLSelectElement>(
     'select[aria-label="カラーテーマ"]'
   )!;

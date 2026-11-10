@@ -204,7 +204,9 @@ export function describeError(error: unknown): string {
     case 404:
       return "見つかりませんでした。";
     case 409:
-      return "会話をアーカイブから復元してから送信してください。";
+      return error.code === "conversation_archived"
+        ? "会話をアーカイブから復元してから送信してください。"
+        : "操作が競合しました。画面を更新してもう一度お試しください。";
     case 413:
       return "メッセージが長すぎるか、1 回の上限額を超えます。短くしてください。";
     case 429: {

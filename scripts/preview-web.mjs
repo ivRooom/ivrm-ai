@@ -65,7 +65,15 @@ createServer(async (req, res) => {
     if (url.pathname === "/api/conversations/demo" && req.method === "PATCH") {
       let body = "";
       for await (const chunk of req) body += chunk;
-      conversation.title = JSON.parse(body).title;
+      try {
+        const input = JSON.parse(body);
+        if (typeof input.title !== "string" || !input.title.trim())
+          throw Error("invalid");
+        conversation.title = input.title.trim();
+      } catch {
+        res.writeHead(400);
+        return res.end(JSON.stringify({ error: "bad_request" }));
+      }
       return res.end(JSON.stringify({ conversation }));
     }
     if (

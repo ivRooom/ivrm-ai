@@ -136,3 +136,14 @@ Rollbackは本PRをrevertして同Workflowで配備。DB変更なし。既存デ
 
 CI初回HEAD `818f5b2` はPostgres17を含む199/199 pass、Docker成功、Semgrep成功。
 Snykはprivate tests quota errorで検査不能。人間approval未取得。本番反映は保留。
+
+## 再設計 v2 — 2026-11-11
+
+ユーザーの『まだ弱い』という評価を受け、前回案を最終品質とせず構造から再設計。
+全幅topbarを廃止しSidebarにブランド/アカウントを統合。project/history/footerの階層、
+PC開閉、archive navigation、左揃えdisplay typography、sage/inkのsemantic palette、
+model toolbar、実際に入力するprompt starters、code copyを実装。CSSは追記層を解消し再構成。
+CodeRabbitのproject rollback/JSON400/409 code別表示/copy一時feedbackも修正。
+
+v2証跡は `evidence/premium-v2/`。新規画面7size×Light/Darkで横overflowなし・Composer画面内。
+PC sidebar開閉、mobile drawer、starter入力を確認。編集/再生成は#31の別PRで継続。

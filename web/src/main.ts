@@ -49,6 +49,7 @@ type State = {
   draft: string;
   sidebarOpen: boolean;
   titleQuery: string;
+  sidebarCollapsed: boolean;
 };
 
 const state: State = {
@@ -65,6 +66,7 @@ const state: State = {
   draft: "",
   sidebarOpen: false,
   titleQuery: "",
+  sidebarCollapsed: false,
   notice: null,
 };
 
@@ -555,42 +557,99 @@ async function openArchivedProjects() {
 
 // ---- drawing --------------------------------------------------------------
 
-function messageView(message: { role: string; content: string }) {
+const copyTimers = new WeakMap<
+  HTMLButtonElement,
+  ReturnType<typeof setTimeout>
+>();
+
+/** Copy uses the original text, never HTML from the Markdown renderer. */
+function copyButton(text: string, label: string, compact = false) {
+  const button = h(
+    "button",
+    {
+      type: "button",
+      class: compact ? "code-copy" : "message-action",
+      "aria-label": label,
+      title: label,
+    },
+    icon("copy"),
+    h("span", {}, "コピー")
+  );
+  button.addEventListener("click", async () => {
+    clearTimeout(copyTimers.get(button));
+    button.disabled = true;
+    try {
+      await navigator.clipboard.writeText(text);
+      button.replaceChildren(icon("check"), h("span", {}, "コピーしました"));
+    } catch {
+      button.replaceChildren(h("span", {}, "コピーできませんでした"));
+    } finally {
+      button.disabled = false;
+      copyTimers.set(
+        button,
+        setTimeout(() => {
+          button.replaceChildren(icon("copy"), h("span", {}, "コピー"));
+        }, 2000)
+      );
+    }
+  });
+  return button;
+}
+
+function messageView(message: {
+  role: string;
+  content: string;
+  modelId?: string | null;
+}) {
   const body = h("div", { class: "body" });
   if (message.role === "assistant") {
-    // Untrusted: parsed and sanitized to an allowlist (markdown.ts).
     body.append(render(message.content));
-  } else {
-    body.textContent = message.content;
-  }
+    for (const pre of body.querySelectorAll("pre")) {
+      const code = pre.querySelector("code");
+      const language =
+        code?.className.match(/language-([\w+-]+)/)?.[1] ?? "コード";
+      const block = h(
+        "div",
+        { class: "code-block" },
+        h(
+          "div",
+          { class: "code-heading" },
+          h("span", {}, language),
+          copyButton(
+            code?.textContent ?? pre.textContent ?? "",
+            "コードをコピー",
+            true
+          )
+        )
+      );
+      pre.replaceWith(block);
+      block.append(pre);
+    }
+  } else body.textContent = message.content;
+  const model =
+    state.models.find((m) => m.id === message.modelId)?.label ?? "ivRooom AI";
   return h(
     "article",
     { class: `message ${message.role}` },
-    h("div", { class: "who" }, message.role === "user" ? "あなた" : "AI"),
+    h(
+      "div",
+      { class: "who" },
+      message.role === "assistant"
+        ? h(
+            "span",
+            { class: "assistant-symbol", "aria-hidden": "true" },
+            icon("spark")
+          )
+        : null,
+      message.role === "user" ? "あなた" : model
+    ),
     body,
     h(
       "div",
       { class: "message-actions" },
-      h(
-        "button",
-        {
-          type: "button",
-          class: "ghost",
-          "aria-label":
-            message.role === "user"
-              ? "自分のメッセージをコピー"
-              : "回答をコピー",
-          onclick: (async (event: Event) => {
-            const button = event.currentTarget as HTMLButtonElement;
-            try {
-              await navigator.clipboard.writeText(message.content);
-              button.textContent = "コピーしました";
-            } catch {
-              button.textContent = "コピーできませんでした";
-            }
-          }) as EventListener,
-        },
-        "コピー"
+      copyButton(
+        message.content,
+        message.role === "user" ? "自分のメッセージをコピー" : "回答をコピー"
       )
     )
   );
@@ -610,12 +669,49 @@ function drawStreaming() {
 
 /** Render the project controls, history filters, and existing conversation list. */
 async function selectProject(id: string) {
+  const previous = state.projectFilter;
   state.projectFilter = id;
   try {
     await loadLists();
     await goTo(null);
   } catch (e) {
+    state.projectFilter = previous;
     showError(e);
+  }
+}
+
+/** Brand signature lives in the navigation, leaving the reading surface quiet. */
+function brand() {
+  return h(
+    "div",
+    { class: "brand-lockup" },
+    h("span", { class: "brand-symbol", "aria-hidden": "true" }, icon("spark")),
+    h("strong", {}, "ivRooom"),
+    h("span", { class: "brand-ai" }, "AI")
+  );
+}
+
+/** Toggle the drawer on mobile or collapse the navigation on desktop. */
+function toggleNavigation() {
+  if (window.matchMedia("(max-width: 900px)").matches)
+    setSidebarOpen(!state.sidebarOpen);
+  else {
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    syncSidebarMode();
+    root.querySelector<HTMLElement>(".menu-toggle")?.focus();
+  }
+}
+
+/** Archive is navigation, not a form preference. Failed loads preserve the current list. */
+async function showArchive(archived: boolean) {
+  const previous = state.showArchived;
+  state.showArchived = archived;
+  try {
+    await loadLists();
+    draw();
+  } catch (error) {
+    state.showArchived = previous;
+    showError(error);
   }
 }
 
@@ -643,151 +739,186 @@ function sidebar() {
         matchingTitle(c.title, state.titleQuery)
       );
   });
-
   return h(
     "nav",
     { class: "sidebar", id: "sidebar", "aria-label": "メインナビゲーション" },
     h(
       "div",
-      { class: "sidebar-heading" },
-      h("span", { class: "sidebar-label" }, "ワークスペース"),
+      { class: "sidebar-brand" },
+      brand(),
       h(
         "button",
         {
-          class: "sidebar-close",
-          type: "button",
-          onclick: () => setSidebarOpen(false),
+          class: "icon-button sidebar-close",
+          "aria-label": "Sidebarを閉じる",
+          title: "Sidebarを閉じる",
+          onclick: toggleNavigation,
         },
-        "閉じる"
+        icon("panel")
       )
     ),
     h(
-      "button",
-      {
-        class: "primary new-chat",
-        type: "button",
-        onclick: () => void goTo(null),
-      },
-      icon("plus"),
-      "新しいチャット"
-    ),
-    h(
-      "details",
-      { class: "project-picker", open: true },
-      h("summary", { class: "sidebar-label" }, "プロジェクト"),
+      "div",
+      { class: "navigation-primary" },
       h(
         "button",
         {
-          class: !state.projectFilter ? "item active" : "item",
-          onclick: () => void selectProject(""),
+          class: "new-chat",
+          type: "button",
+          onclick: () => {
+            const previous = state.showArchived;
+            state.draft = "";
+            state.showArchived = false;
+            void loadLists()
+              .then(() => goTo(null))
+              .catch((error: unknown) => {
+                state.showArchived = previous;
+                showError(error);
+              });
+          },
         },
-        "すべての会話"
+        icon("compose"),
+        "新しいチャット"
       ),
-      ...state.projects.map((p) =>
+      h(
+        "div",
+        { class: "search-field" },
+        icon("search"),
+        search,
+        h("kbd", { "aria-hidden": "true" }, "⌘ K")
+      )
+    ),
+    h(
+      "div",
+      { class: "sidebar-scroll" },
+      h(
+        "section",
+        { class: "project-section", "aria-label": "プロジェクト" },
         h(
           "div",
-          { class: "project-nav-row" },
+          { class: "section-heading" },
+          h("span", {}, "プロジェクト"),
           h(
             "button",
             {
-              class: p.id === state.projectFilter ? "item active" : "item",
-              onclick: () => void selectProject(p.id),
+              class: "icon-button",
+              title: "プロジェクトを作成",
+              "aria-label": "プロジェクトを作成",
+              onclick: () => editProject(null),
             },
-            p.name
-          ),
-          h(
-            "button",
-            {
-              class: "ghost",
-              "aria-label": p.name + "を編集",
-              onclick: () => editProject(p),
-            },
-            "編集"
+            icon("plus")
           )
-        )
-      )
-    ),
-    h(
-      "div",
-      { class: "sidebar-actions" },
-      h(
-        "button",
-        { class: "ghost", type: "button", onclick: () => editProject(null) },
-        "＋ プロジェクト"
-      ),
-      h(
-        "button",
-        {
-          class: "ghost",
-          type: "button",
-          onclick: () => void openArchivedProjects(),
-        },
-        "アーカイブ済み"
-      )
-    ),
-    h(
-      "div",
-      { class: "history-heading" },
-      h("span", { class: "sidebar-label" }, "最近の会話"),
-      h(
-        "label",
-        { class: "check" },
-        h("input", {
-          type: "checkbox",
-          checked: state.showArchived,
-          onchange: (async (event: Event) => {
-            state.showArchived = (event.target as HTMLInputElement).checked;
-            try {
-              await loadLists();
-            } catch (error) {
-              showError(error);
-              return;
-            }
-            draw();
-          }) as EventListener,
-        }),
-        "アーカイブを表示"
-      )
-    ),
-    search,
-    h(
-      "ul",
-      { class: "conversations" },
-      ...state.conversations.map((c) =>
+        ),
         h(
-          "li",
+          "button",
           {
-            "data-title": c.title,
-            hidden: !matchingTitle(c.title, state.titleQuery),
+            class: !state.projectFilter
+              ? "item project-link active"
+              : "item project-link",
+            onclick: () => void selectProject(""),
           },
+          icon("layers"),
+          h("span", {}, "すべての会話")
+        ),
+        ...state.projects.map((p) =>
           h(
-            "button",
-            {
-              class:
-                c.id === state.current?.conversation.id
-                  ? "item active"
-                  : "item",
-              ...(c.id === state.current?.conversation.id
-                ? { "aria-current": "page" }
-                : {}),
-              type: "button",
-              onclick: () => void goTo(c.id),
-            },
-            c.title || "(無題)"
+            "div",
+            { class: "project-nav-row" },
+            h(
+              "button",
+              {
+                class:
+                  p.id === state.projectFilter
+                    ? "item project-link active"
+                    : "item project-link",
+                onclick: () => void selectProject(p.id),
+              },
+              icon("folder"),
+              h("span", {}, p.name)
+            ),
+            h(
+              "button",
+              {
+                class: "icon-button project-edit",
+                title: p.name + "を編集",
+                "aria-label": p.name + "を編集",
+                onclick: () => editProject(p),
+              },
+              icon("more")
+            )
           )
-        )
+        ),
+        !state.projects.length
+          ? h(
+              "p",
+              { class: "nav-empty" },
+              "テーマごとに会話と指示をまとめられます。"
+            )
+          : null
       ),
       h(
-        "li",
+        "section",
         {
-          class: "history-empty search-empty",
-          hidden: state.conversations.some((c) =>
-            matchingTitle(c.title, state.titleQuery)
-          ),
+          class: "history-section",
+          "aria-label": state.showArchived
+            ? "アーカイブした会話"
+            : "最近の会話",
         },
-        state.conversations.length
-          ? "一致するタイトルはありません"
-          : "会話はまだありません"
+        h(
+          "div",
+          { class: "section-heading" },
+          h("span", {}, state.showArchived ? "アーカイブ" : "最近の会話"),
+          state.showArchived
+            ? h(
+                "button",
+                {
+                  class: "text-button",
+                  onclick: () => void showArchive(false),
+                },
+                "戻る"
+              )
+            : null
+        ),
+        h(
+          "ul",
+          { class: "conversations" },
+          ...state.conversations.map((c) =>
+            h(
+              "li",
+              {
+                "data-title": c.title,
+                hidden: !matchingTitle(c.title, state.titleQuery),
+              },
+              h(
+                "button",
+                {
+                  class:
+                    c.id === state.current?.conversation.id
+                      ? "item active"
+                      : "item",
+                  ...(c.id === state.current?.conversation.id
+                    ? { "aria-current": "page" }
+                    : {}),
+                  title: c.title || "無題の会話",
+                  onclick: () => void goTo(c.id),
+                },
+                h("span", {}, c.title || "無題の会話")
+              )
+            )
+          ),
+          h(
+            "li",
+            {
+              class: "history-empty search-empty",
+              hidden: state.conversations.some((c) =>
+                matchingTitle(c.title, state.titleQuery)
+              ),
+            },
+            state.conversations.length
+              ? "一致するタイトルはありません"
+              : "ここに会話が並びます"
+          )
+        )
       )
     ),
     h(
@@ -795,8 +926,38 @@ function sidebar() {
       { class: "sidebar-footer" },
       h(
         "button",
-        { class: "ghost", onclick: openSettings },
-        "表示設定・ショートカット"
+        {
+          class: state.showArchived ? "footer-link active" : "footer-link",
+          onclick: () => void showArchive(!state.showArchived),
+        },
+        icon("archive"),
+        "アーカイブ"
+      ),
+      h(
+        "button",
+        { class: "footer-link", onclick: () => void openArchivedProjects() },
+        icon("folder"),
+        "プロジェクトのアーカイブ"
+      ),
+      h(
+        "button",
+        {
+          class: "account-button",
+          "aria-label": "表示設定・ショートカット",
+          onclick: openSettings,
+        },
+        h(
+          "span",
+          { class: "account-avatar", "aria-hidden": "true" },
+          (state.me?.username ?? "U").slice(0, 1).toUpperCase()
+        ),
+        h(
+          "span",
+          { class: "account-copy" },
+          h("strong", {}, state.me?.username ?? "メンバー"),
+          h("span", {}, "表示設定・ショートカット")
+        ),
+        icon("settings")
       )
     )
   );
@@ -835,7 +996,7 @@ function chat() {
     id: "composer-input",
     rows: "1",
     maxlength: "8000",
-    placeholder: "メッセージを入力…",
+    placeholder: "何から始めましょう？",
     "aria-label": "メッセージ",
     "aria-describedby": "composer-help",
     disabled: !!state.sending || conversation?.archived === true,
@@ -902,7 +1063,8 @@ function chat() {
 
   const messages = state.current?.messages ?? [];
   const project = state.projects.find(
-    (candidate) => candidate.id === conversation?.projectId
+    (candidate) =>
+      candidate.id === (conversation?.projectId ?? state.projectFilter)
   );
   const isEmpty = messages.length === 0 && state.streaming === null;
 
@@ -913,16 +1075,45 @@ function chat() {
       "header",
       { class: "chat-header" },
       h(
+        "button",
+        {
+          class: "icon-button menu-toggle",
+          type: "button",
+          "aria-controls": "sidebar",
+          "aria-expanded": String(!state.sidebarCollapsed),
+          "aria-label": "ナビゲーションを開く",
+          title: "ナビゲーションを切り替える",
+          onclick: toggleNavigation,
+        },
+        icon("panel")
+      ),
+      h(
         "div",
         { class: "conversation-heading" },
         h(
           "h1",
           {},
-          conversation ? conversation.title || "(無題)" : "新しいチャット"
+          conversation
+            ? conversation.title || "無題の会話"
+            : (project?.name ?? "ワークスペース")
         ),
-        h("p", { class: "conversation-caption" }, project?.name ?? "ivRooom AI")
+        conversation
+          ? h(
+              "span",
+              { class: "conversation-caption" },
+              project?.name ?? "個人の会話"
+            )
+          : null
       ),
-      conversation ? conversationMenu(conversation) : null
+      h("span", { class: "header-spacer" }),
+      conversation
+        ? conversationMenu(conversation)
+        : h(
+            "span",
+            { class: "private-caption" },
+            icon("lock"),
+            "自分だけのスペース"
+          )
     ),
     state.notice
       ? h("p", { class: "notice", role: "alert" }, state.notice)
@@ -938,12 +1129,25 @@ function chat() {
         ? h(
             "div",
             { class: "welcome" },
-            h("span", { class: "welcome-mark", "aria-hidden": "true" }, "i"),
-            h("h2", { class: "welcome-title" }, "今日は、何を考えましょう？"),
+            h(
+              "div",
+              { class: "welcome-eyebrow" },
+              icon("spark"),
+              "考える時間を、もっと自由に。"
+            ),
+            h(
+              "h2",
+              { class: "welcome-title" },
+              "考えを、",
+              h("br"),
+              h("span", {}, "次のかたちに。")
+            ),
             h(
               "p",
               { class: "welcome-copy" },
-              "アイデアを整理する。深く調べる。次の一歩をつくる。"
+              "書く、つくる、解きほぐす。",
+              h("br"),
+              "ここから、一緒に始めましょう。"
             )
           )
         : null,
@@ -987,18 +1191,25 @@ function chat() {
           h(
             "div",
             { class: "composer-toolbar" },
-            h(
-              "span",
-              { class: "composer-hint", id: "composer-help" },
-              "Enter で送信 · Shift+Enter で改行"
-            ),
-            h("span", { class: "grow" }),
+
             h(
               "label",
               { class: "sr-only", for: "composer-model" },
               "使用するモデル"
             ),
-            modelSelect,
+            h(
+              "div",
+              { class: "model-picker" },
+              icon("model"),
+              modelSelect,
+              icon("chevron")
+            ),
+            h("span", { class: "grow" }),
+            h(
+              "span",
+              { class: "composer-hint", id: "composer-help" },
+              "Shift + Enter で改行"
+            ),
             state.sending
               ? h(
                   "button",
@@ -1014,7 +1225,56 @@ function chat() {
               : null,
             sendButton
           )
+        ),
+    isEmpty && !conversation?.archived
+      ? h(
+          "div",
+          { class: "prompt-starters", "aria-label": "会話のヒント" },
+          ...(
+            [
+              [
+                "write",
+                "文章を整える",
+                "次の文章を、意図が伝わる自然な表現に整えてください。\n\n",
+              ],
+              [
+                "spark",
+                "考えを整理する",
+                "考えを整理する手伝いをしてください。まず、目的と今迷っていることを聞いてください。",
+              ],
+              [
+                "code",
+                "コードを相談する",
+                "次のコードについて、問題点と改善案を教えてください。\n\n",
+              ],
+            ] as const
+          ).map(([symbol, title, draft]) =>
+            h(
+              "button",
+              {
+                class: "starter",
+                type: "button",
+                disabled: !!state.sending,
+                onclick: () => {
+                  state.draft = draft;
+                  textarea.value = draft;
+                  resizeComposer(textarea);
+                  sendButton.disabled = !modelAvailable();
+                  textarea.focus();
+                },
+              },
+              icon(symbol),
+              title,
+              icon("arrow")
+            )
+          )
         )
+      : null,
+    h(
+      "p",
+      { class: "workspace-disclaimer" },
+      "AIの回答は必ずしも正確ではありません。大切な情報は確認してください。"
+    )
   );
 }
 
@@ -1044,11 +1304,21 @@ function syncSidebarMode() {
   const nav = root.querySelector<HTMLElement>("#sidebar");
   const chatMain = root.querySelector<HTMLElement>(".chat");
   if (!layout || !nav || !chatMain) return;
-  const hidden = mobile && !state.sidebarOpen;
+  const hidden = mobile ? !state.sidebarOpen : state.sidebarCollapsed;
+  layout.classList.toggle(
+    "sidebar-collapsed",
+    !mobile && state.sidebarCollapsed
+  );
   layout.classList.toggle("sidebar-open", mobile && state.sidebarOpen);
   nav.toggleAttribute("inert", hidden);
   nav.setAttribute("aria-hidden", String(hidden));
   chatMain.toggleAttribute("inert", mobile && state.sidebarOpen);
+  const toggle = root.querySelector<HTMLElement>(".menu-toggle");
+  toggle?.setAttribute("aria-expanded", String(!hidden));
+  toggle?.setAttribute(
+    "aria-label",
+    hidden ? "ナビゲーションを開く" : "ナビゲーションを閉じる"
+  );
 }
 
 /** Toggle mobile navigation in place so conversation scroll and draft selection survive. */
@@ -1076,32 +1346,6 @@ function draw() {
     h(
       "div",
       { class: "layout" },
-      h(
-        "header",
-        { class: "topbar" },
-        h(
-          "button",
-          {
-            class: "menu-toggle",
-            type: "button",
-            "aria-controls": "sidebar",
-            "aria-expanded": String(state.sidebarOpen),
-            "aria-label": state.sidebarOpen
-              ? "ナビゲーションを閉じる"
-              : "ナビゲーションを開く",
-            onclick: () => setSidebarOpen(!state.sidebarOpen),
-          },
-          icon("menu")
-        ),
-        h(
-          "div",
-          { class: "brand-lockup" },
-          h("span", { class: "brand-mark", "aria-hidden": "true" }, "i"),
-          h("strong", {}, "ivRooom"),
-          h("span", { class: "brand-ai" }, "AI")
-        ),
-        h("span", { class: "account-name" }, state.me.username)
-      ),
       h("button", {
         class: "sidebar-backdrop",
         type: "button",
@@ -1131,6 +1375,10 @@ window.addEventListener("keydown", (event) => {
   ) {
     event.preventDefault();
     if (window.matchMedia("(max-width: 900px)").matches) setSidebarOpen(true);
+    else if (state.sidebarCollapsed) {
+      state.sidebarCollapsed = false;
+      syncSidebarMode();
+    }
     root.querySelector<HTMLInputElement>(".history-search")?.focus();
     return;
   }

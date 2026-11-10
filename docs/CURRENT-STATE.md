@@ -23,3 +23,9 @@ PR [#62](https://github.com/ivRooom/ivrm-ai/pull/62)。初回HEAD `818f5b2` の
 Postgres17込み199/199 tests pass。Semgrep success。Snykはprivate tests quota error、
 人間approvalなし。未merge/未deploy。最新HEADの結果をPRで再確認する。
 最終SVG版のviewportスクリーンショットをtransition完了後に再取得。
+
+## v2 再設計
+
+前回案への『まだ弱い』フィードバックに対応。Shell/Sidebar/Welcome/Composer/Messageを
+再設計しcode copy/PC nav collapse/prompt startersを追加。詳細と新証跡はpremium-workspace.md。
+#31の編集・再生成は元会話保持のfork方式で別PRへ。未merge/未deploy。
