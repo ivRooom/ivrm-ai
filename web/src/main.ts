@@ -50,6 +50,8 @@ type State = {
   sidebarOpen: boolean;
   titleQuery: string;
   sidebarCollapsed: boolean;
+  forking: boolean;
+  branchSource: { id: string; title: string } | null;
 };
 
 const state: State = {
@@ -67,6 +69,8 @@ const state: State = {
   sidebarOpen: false,
   titleQuery: "",
   sidebarCollapsed: false,
+  forking: false,
+  branchSource: null,
   notice: null,
 };
 
@@ -133,6 +137,7 @@ async function openConversation(id: string | null) {
  * stop button) instead of being drawn under another conversation.
  */
 async function goTo(id: string | null) {
+  state.branchSource = null;
   state.sending?.abort();
   if (id !== (state.current?.conversation.id ?? null)) state.draft = "";
   const navigationSeq = openSeq + 1;
@@ -153,7 +158,7 @@ async function goTo(id: string | null) {
 
 /** Create a conversation if needed, then send and stream one user message. */
 async function send(text: string) {
-  if (state.sending || !text.trim()) return;
+  if (state.sending || state.forking || !text.trim()) return;
   state.notice = null;
   const controller = new AbortController();
   state.sending = controller;
@@ -279,6 +284,102 @@ function openSettings() {
   );
   document.body.append(dialog);
   dialog.showModal();
+}
+
+/** Fork before the selected question; the original history is never edited or deleted. */
+async function forkMessage(messageId: string, replacement?: string) {
+  if (!state.current || state.sending || state.forking) return;
+  const source = state.current.conversation;
+  const seq = openSeq;
+  state.forking = true;
+  state.notice = null;
+  draw();
+  try {
+    const result = await api.forkConversation(
+      source.id,
+      messageId,
+      state.modelId
+    );
+    if (seq !== openSeq || state.current?.conversation.id !== source.id) return;
+    state.draft = replacement ?? result.draft;
+    await openConversation(result.conversation.id);
+    if (state.current?.conversation.id !== result.conversation.id) return;
+    state.branchSource = { id: source.id, title: source.title || "元の会話" };
+    await loadLists();
+    state.forking = false;
+    const text = state.draft;
+    state.draft = "";
+    await send(text);
+  } catch (error) {
+    state.notice =
+      describeError(error) +
+      (!(error instanceof ApiError)
+        ? " 分岐が作成された可能性があります。再操作の前に会話一覧を確認してください。"
+        : "");
+  } finally {
+    state.forking = false;
+    draw();
+  }
+}
+
+/** Editing is explicit: show the original question and send into a new branch. */
+function editMessage(message: Message) {
+  if (state.sending || state.forking) return;
+  const dialog = h("dialog", {
+    class: "dialog edit-message-dialog",
+    "aria-label": "質問を編集して分岐",
+  });
+  const textarea = h("textarea", {
+    maxlength: "8000",
+    required: true,
+    rows: "7",
+    "aria-label": "編集する質問",
+  });
+  textarea.value = message.content;
+  const close = () => {
+    dialog.close();
+    dialog.remove();
+  };
+  dialog.addEventListener("cancel", () => dialog.remove());
+  const error = h("p", { role: "alert", class: "muted" });
+  dialog.append(
+    h(
+      "form",
+      {
+        onsubmit: ((event: Event) => {
+          event.preventDefault();
+          if (!textarea.value.trim()) {
+            error.textContent = "質問を入力してください。";
+            return;
+          }
+          const text = textarea.value.trim();
+          close();
+          void forkMessage(message.id, text);
+        }) as EventListener,
+      },
+      h("h2", {}, "質問を編集して分岐"),
+      h(
+        "p",
+        { class: "muted" },
+        "この質問より前の履歴を引き継いで、新しい会話で回答します。元の会話と回答は残ります。"
+      ),
+      textarea,
+      error,
+      h(
+        "div",
+        { class: "row end" },
+        h(
+          "button",
+          { type: "button", class: "ghost", onclick: close },
+          "キャンセル"
+        ),
+        h("button", { type: "submit" }, "分岐して送信")
+      )
+    )
+  );
+  document.body.append(dialog);
+  dialog.showModal();
+  textarea.focus();
 }
 
 function renameConversation(conversation: Conversation) {
@@ -596,11 +697,7 @@ function copyButton(text: string, label: string, compact = false) {
   return button;
 }
 
-function messageView(message: {
-  role: string;
-  content: string;
-  modelId?: string | null;
-}) {
+function messageView(message: Message) {
   const body = h("div", { class: "body" });
   if (message.role === "assistant") {
     body.append(render(message.content));
@@ -626,6 +723,41 @@ function messageView(message: {
       block.append(pre);
     }
   } else body.textContent = message.content;
+  const index =
+    state.current?.messages.findIndex((m) => m.id === message.id) ?? -1;
+  const previous = state.current?.messages
+    .slice(0, index + 1)
+    .reverse()
+    .find((m) => m.role === "user");
+  const canFork = !state.current?.conversation.archived && index >= 0;
+  const forkAction =
+    message.role === "user"
+      ? h(
+          "button",
+          {
+            class: "message-action",
+            title: "元の会話を残して質問を編集",
+            "aria-label": "質問を編集して分岐",
+            disabled: !!state.sending || state.forking,
+            onclick: () => editMessage(message),
+          },
+          icon("compose"),
+          "編集して分岐"
+        )
+      : previous
+        ? h(
+            "button",
+            {
+              class: "message-action",
+              title: "元の会話を残して同じ質問から生成",
+              "aria-label": "回答を再生成",
+              disabled: !!state.sending || state.forking,
+              onclick: () => void forkMessage(previous.id),
+            },
+            icon("refresh"),
+            "もう一度生成"
+          )
+        : null;
   const model =
     state.models.find((m) => m.id === message.modelId)?.label ?? "ivRooom AI";
   return h(
@@ -650,7 +782,8 @@ function messageView(message: {
       copyButton(
         message.content,
         message.role === "user" ? "自分のメッセージをコピー" : "回答をコピー"
-      )
+      ),
+      canFork ? forkAction : null
     )
   );
 }
@@ -999,7 +1132,8 @@ function chat() {
     placeholder: "何から始めましょう？",
     "aria-label": "メッセージ",
     "aria-describedby": "composer-help",
-    disabled: !!state.sending || conversation?.archived === true,
+    disabled:
+      !!state.sending || state.forking || conversation?.archived === true,
   });
   textarea.value = state.draft;
 
@@ -1008,7 +1142,7 @@ function chat() {
     {
       id: "composer-model",
       "aria-label": "使用するモデル",
-      disabled: !!state.sending || state.models.length === 0,
+      disabled: !!state.sending || state.forking || state.models.length === 0,
       onchange: ((event: Event) => {
         state.modelId = (event.target as HTMLSelectElement).value;
       }) as EventListener,
@@ -1026,7 +1160,7 @@ function chat() {
       type: "submit",
       class: "send-button",
       "aria-label": "メッセージを送信",
-      disabled: !!state.sending || !modelAvailable(),
+      disabled: !!state.sending || state.forking || !modelAvailable(),
     },
     icon("send")
   );
@@ -1115,9 +1249,32 @@ function chat() {
             "自分だけのスペース"
           )
     ),
-    state.notice
-      ? h("p", { class: "notice", role: "alert" }, state.notice)
-      : null,
+    h(
+      "div",
+      { class: "workspace-notices" },
+      state.branchSource
+        ? h(
+            "div",
+            { class: "branch-notice", role: "status" },
+            icon("branch"),
+            h("span", {}, "元の会話を残して、新しい会話に分岐しました。"),
+            h(
+              "button",
+              {
+                class: "text-button",
+                onclick: () => void goTo(state.branchSource!.id),
+              },
+              "元の会話を開く"
+            )
+          )
+        : null,
+      state.forking
+        ? h("p", { class: "notice", role: "status" }, "履歴を引き継いでいます…")
+        : null,
+      state.notice
+        ? h("p", { class: "notice", role: "alert" }, state.notice)
+        : null
+    ),
     h(
       "section",
       {

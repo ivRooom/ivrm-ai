@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { MAX_FORK_MESSAGES, MAX_FORK_BYTES, type ForkResult } from "./types.js";
 import type {
   ChatStore,
   Conversation,
@@ -157,6 +158,59 @@ export class InMemoryChatStore implements ChatStore {
   ): Promise<void> {
     const row = this.conversations.get(id);
     if (row && row.ownerId === ownerId && row.title === "") row.title = title;
+  }
+
+  async forkConversation(
+    ownerId: string,
+    sourceId: string,
+    messageId: string,
+    modelId: string
+  ): Promise<ForkResult> {
+    const source = this.conversations.get(sourceId);
+    if (!source || source.ownerId !== ownerId) return null;
+    const history = this.messages.filter((m) => m.conversationId === sourceId);
+    const index = history.findIndex(
+      (m) => m.id === messageId && m.role === "user"
+    );
+    if (index < 0) return null;
+    if (source.archived) return { error: "conversation_archived" };
+    if (source.projectId) {
+      const project = this.projects.get(source.projectId);
+      if (!project || project.ownerId !== ownerId) return null;
+      if (project.archived) return { error: "project_archived" };
+    }
+    const prefix = history.slice(0, index);
+    if (
+      prefix.length > MAX_FORK_MESSAGES ||
+      prefix.reduce((n, m) => n + Buffer.byteLength(m.content, "utf8"), 0) >
+        MAX_FORK_BYTES
+    )
+      return { error: "history_too_large" };
+    const at = this.stamp();
+    const conversation: ConversationRow = {
+      ...source,
+      id: randomUUID(),
+      modelId,
+      title: source.title
+        ? Array.from(source.title).slice(0, 290).join("") + " / 分岐"
+        : "分岐した会話",
+      archived: false,
+      createdAt: at,
+      updatedAt: at,
+    };
+    const copies = prefix.map((m) => ({
+      ...m,
+      id: randomUUID(),
+      conversationId: conversation.id,
+      createdAt: at,
+    }));
+    // All validation/allocation precedes mutation; no awaited work in the commit section.
+    this.conversations.set(conversation.id, conversation);
+    this.messages.push(...copies);
+    return {
+      conversation: strip(conversation),
+      draft: history[index]!.content,
+    };
   }
 
   async listMessages(

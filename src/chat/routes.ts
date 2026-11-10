@@ -12,6 +12,7 @@ import {
   type ChatMessage,
   type StreamEvent,
 } from "../models/types.js";
+import { ForkLimiter } from "./fork-limiter.js";
 import type { ChatStore, StoredMessage } from "./types.js";
 
 export const MAX_TEXT_CHARS = 8000;
@@ -328,6 +329,49 @@ export function chatRoutes(deps: ChatDeps) {
       return c.json({ conversation });
     });
   }
+
+  const forkLimiter = new ForkLimiter(() => now().getTime());
+  const forkBody = z
+    .object({
+      messageId: z.string().min(1).max(100),
+      modelId: z.string().min(1).max(100),
+    })
+    .strict();
+  app.post("/conversations/:id/fork", async (c) => {
+    const body = await readJson(c, forkBody);
+    if (!body) return badRequest();
+    const denied = await checkModel(c, body.modelId);
+    if (denied) return denied;
+    const owner = c.get("session").userId;
+    const sourceId = c.req.param("id");
+    const release = forkLimiter.acquire(owner);
+    if (typeof release === "number")
+      return json(
+        429,
+        { error: "limit_exceeded", reason: "fork_rate" },
+        { "retry-after": String(release) }
+      );
+    try {
+      const result = await store.forkConversation(
+        owner,
+        sourceId,
+        body.messageId,
+        body.modelId
+      );
+      if (!result) return notFound();
+      if ("error" in result)
+        return json(result.error === "history_too_large" ? 413 : 409, result);
+      await record(
+        owner,
+        "conversation.fork",
+        `conversation/${result.conversation.id}`,
+        { sourceId, messageId: body.messageId }
+      );
+      return json(201, result);
+    } finally {
+      release();
+    }
+  });
 
   // ---- send a message (SSE) -------------------------------------------
 
