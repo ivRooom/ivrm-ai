@@ -105,6 +105,12 @@ export const api = {
       "GET",
       `/conversations/${encodeURIComponent(id)}`
     ),
+  renameConversation: (id: string, title: string) =>
+    call<{ conversation: Conversation }>(
+      "PATCH",
+      `/conversations/${encodeURIComponent(id)}`,
+      { title }
+    ).then((r) => r.conversation),
   setConversationArchived: (id: string, archived: boolean) =>
     call<{ conversation: Conversation }>(
       "POST",
@@ -197,6 +203,8 @@ export function describeError(error: unknown): string {
       return "この操作は許可されていません。";
     case 404:
       return "見つかりませんでした。";
+    case 409:
+      return "会話をアーカイブから復元してから送信してください。";
     case 413:
       return "メッセージが長すぎるか、1 回の上限額を超えます。短くしてください。";
     case 429: {

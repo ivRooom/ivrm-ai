@@ -1,0 +1,44 @@
+[
+  {
+    "composerVisible": true,
+    "h": 568,
+    "overflow": false,
+    "w": 320
+  },
+  {
+    "composerVisible": true,
+    "h": 800,
+    "overflow": false,
+    "w": 360
+  },
+  {
+    "composerVisible": true,
+    "h": 844,
+    "overflow": false,
+    "w": 390
+  },
+  {
+    "composerVisible": true,
+    "h": 932,
+    "overflow": false,
+    "w": 430
+  },
+  {
+    "composerVisible": true,
+    "h": 1024,
+    "overflow": false,
+    "w": 768
+  },
+  {
+    "composerVisible": true,
+    "h": 800,
+    "overflow": false,
+    "w": 1280
+  },
+  {
+    "composerVisible": true,
+    "h": 900,
+    "overflow": false,
+    "w": 1440
+  }
+]

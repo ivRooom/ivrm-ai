@@ -138,6 +138,18 @@ export class InMemoryChatStore implements ChatStore {
     return strip(row);
   }
 
+  async renameConversation(
+    ownerId: string,
+    id: string,
+    title: string
+  ): Promise<Conversation | null> {
+    const row = this.conversations.get(id);
+    if (!row || row.ownerId !== ownerId) return null;
+    row.title = title;
+    row.updatedAt = this.stamp();
+    return strip(row);
+  }
+
   async setTitleIfEmpty(
     ownerId: string,
     id: string,

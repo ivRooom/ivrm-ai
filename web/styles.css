@@ -1,7 +1,7 @@
 :root {
   color-scheme: light dark;
-  --page: #f7f8fa;
-  --sidebar: #f0f2f5;
+  --page: #faf9f6;
+  --sidebar: #f0efeb;
   --surface: #ffffff;
   --surface-raised: #ffffff;
   --surface-hover: #e9edf3;
@@ -9,8 +9,8 @@
   --muted: #626b78;
   --subtle: #6c7480;
   --line: #dfe3e8;
-  --accent: #5263e8;
-  --accent-hover: #4454d2;
+  --accent: #5259a8;
+  --accent-hover: #42488e;
   --accent-contrast: #ffffff;
   --accent-soft: #edf0ff;
   --user: #e9edff;
@@ -18,9 +18,9 @@
   --notice-text: #704b0a;
   --focus: #4e61eb;
   --shadow-soft: 0 8px 28px rgb(26 33 52 / 8%);
-  --radius-sm: 9px;
-  --radius-md: 14px;
-  --radius-lg: 22px;
+  --radius-sm: 7px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -28,9 +28,9 @@
   --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
-  --topbar-height: 64px;
-  --sidebar-width: 276px;
-  --content-width: 860px;
+  --topbar-height: 54px;
+  --sidebar-width: 264px;
+  --content-width: 800px;
   --font-sans:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
@@ -38,7 +38,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --page: #17191d;
     --sidebar: #1e2025;
     --surface: #22252a;
@@ -60,8 +60,36 @@
   }
 }
 
+:root[data-theme="dark"] {
+  --page: #17191d;
+  --sidebar: #1e2025;
+  --surface: #22252a;
+  --surface-raised: #272a30;
+  --surface-hover: #2c3037;
+  --text: #eceef2;
+  --muted: #b1b7c1;
+  --subtle: #858d99;
+  --line: #363a42;
+  --accent: #8995ff;
+  --accent-hover: #a4adff;
+  --accent-contrast: #17191d;
+  --accent-soft: #292d47;
+  --user: #292d47;
+  --notice: #3c3322;
+  --notice-text: #f2d18a;
+  --focus: #a2acff;
+  --shadow-soft: 0 8px 28px rgb(0 0 0 / 22%);
+}
+
 * {
   box-sizing: border-box;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 html {
@@ -1144,4 +1172,238 @@ select {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Workspace hierarchy: quiet navigation, reading surface, deliberate input. */
+[hidden] {
+  display: none !important;
+}
+.topbar {
+  background: var(--page);
+  border-bottom-color: transparent;
+}
+.sidebar {
+  border-right-color: transparent;
+  gap: 16px;
+}
+.new-chat {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--line);
+  box-shadow: none;
+  border-radius: var(--radius-sm);
+}
+.new-chat:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+  border-color: var(--line);
+}
+.sidebar-heading {
+  padding-inline: 10px;
+}
+.project-picker {
+  margin-top: 12px;
+}
+.project-picker summary {
+  padding: 4px 10px 8px;
+  cursor: pointer;
+}
+.project-nav-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.project-nav-row .item {
+  flex: 1;
+}
+.project-nav-row > .ghost {
+  font-size: 11px;
+  padding-inline: 7px;
+}
+.history-heading {
+  flex-direction: column;
+  align-items: flex-start;
+  padding-inline: 10px;
+  gap: 8px;
+}
+.history-search {
+  width: 100%;
+  background: transparent;
+  min-height: 40px;
+  font-size: 13px;
+}
+.sidebar-actions {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.chat {
+  position: relative;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+.chat-header {
+  grid-row: 1;
+  min-height: 64px;
+}
+.chat > .notice {
+  grid-row: 2;
+}
+.chat > .messages {
+  grid-row: 3;
+}
+.chat > .composer,
+.chat > .archived-message {
+  grid-row: 4;
+}
+.composer {
+  width: min(100%, var(--content-width));
+  border-radius: var(--radius-lg);
+  box-shadow: 0 3px 14px rgb(0 0 0 / 4%);
+}
+.composer:focus-within {
+  box-shadow: 0 0 0 1px var(--focus);
+}
+.new-workspace {
+  grid-template-rows: auto minmax(12px, 1fr) auto auto minmax(24px, 1.2fr);
+}
+.new-workspace > .messages {
+  grid-row: 3;
+  overflow: visible;
+  padding-block: 0;
+}
+.new-workspace > .composer {
+  grid-row: 4;
+  margin-top: 24px;
+}
+.new-workspace > .notice {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 48px);
+  z-index: 2;
+}
+.welcome {
+  margin: 0 auto;
+  padding: 0 12px;
+}
+.welcome-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  margin-bottom: 22px;
+  font-size: 24px;
+}
+.welcome-title {
+  font-size: clamp(23px, 2.6vw, 32px);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+.welcome-copy {
+  font-size: 13px;
+  margin-top: 14px;
+}
+.message .body {
+  font-size: 16px;
+  line-height: 1.85;
+}
+.message.user .body {
+  background: var(--sidebar);
+  border-color: transparent;
+  border-radius: 14px;
+}
+.message-actions {
+  display: flex;
+  margin-top: 8px;
+}
+.message-actions button {
+  min-height: 32px;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 8px;
+}
+.conversation-menu {
+  position: relative;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.conversation-menu summary {
+  cursor: pointer;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+.conversation-menu summary:hover {
+  background: var(--surface-hover);
+}
+.conversation-menu summary:focus-visible,
+.project-picker summary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.menu-panel {
+  position: absolute;
+  z-index: 10;
+  right: 0;
+  top: 100%;
+  width: min(280px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+.menu-panel button {
+  justify-content: flex-start;
+  font-size: 13px;
+}
+.menu-caption {
+  margin: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+@media (max-width: 480px) {
+  .new-workspace > .composer {
+    margin-top: 20px;
+  }
+  .welcome-copy {
+    max-width: 240px;
+    line-height: 1.8;
+  }
+  .message .body {
+    font-size: 15px;
+  }
+  .composer textarea,
+  .dialog input {
+    font-size: 16px;
+  }
+  .message-actions button {
+    min-height: 44px;
+  }
+}
+@media (max-height: 620px) {
+  .new-workspace {
+    grid-template-rows: auto minmax(8px, 1fr) auto auto minmax(8px, 1fr);
+  }
+  .welcome-mark {
+    display: none;
+  }
+  .welcome-copy {
+    margin-top: 8px;
+  }
+  .new-workspace > .composer {
+    margin-top: 14px;
+  }
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 20px;
+}
+.sidebar-footer button {
+  width: 100%;
+  justify-content: flex-start;
+  color: var(--muted);
+  font-size: 12px;
 }

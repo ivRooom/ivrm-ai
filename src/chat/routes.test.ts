@@ -87,6 +87,62 @@ function parseSse(text: string) {
     });
 }
 
+describe("PATCH conversation title", () => {
+  it("refuses archived conversation sends before model invocation or persistence", async () => {
+    const model = scriptedModel();
+    const { call, conversation, store } = setup({ model });
+    const c = await conversation();
+    await call("alice", "POST", `/conversations/${c.id}/archive`);
+    expect(
+      (
+        await call("alice", "POST", `/conversations/${c.id}/messages`, {
+          text: "blocked",
+        })
+      ).status
+    ).toBe(409);
+    expect(model.requests).toEqual([]);
+    expect(await store.listMessages("alice", c.id, 200)).toEqual([]);
+    await call("alice", "POST", `/conversations/${c.id}/unarchive`);
+    expect(
+      (
+        await call("alice", "POST", `/conversations/${c.id}/messages`, {
+          text: "restored",
+        })
+      ).status
+    ).toBe(200);
+  });
+  it("validates titles, enforces ownership, and audits without content", async () => {
+    const { call, conversation, audit } = setup();
+    const c = await conversation();
+    expect(
+      (
+        await call("bob", "PATCH", `/conversations/${c.id}`, {
+          title: "hijack",
+        })
+      ).status
+    ).toBe(404);
+    for (const body of [
+      { title: " " },
+      { title: "x".repeat(301) },
+      { title: "ok", ownerId: "bob" },
+    ])
+      expect(
+        (await call("alice", "PATCH", `/conversations/${c.id}`, body)).status
+      ).toBe(400);
+    const response = await call("alice", "PATCH", `/conversations/${c.id}`, {
+      title: " 新しいタイトル ",
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).conversation.title).toBe("新しいタイトル");
+    expect(
+      (await (await call("alice", "GET", `/conversations/${c.id}`)).json())
+        .conversation.title
+    ).toBe("新しいタイトル");
+    expect(JSON.stringify(audit.entries)).not.toContain("新しいタイトル");
+    expect(JSON.stringify(audit.entries)).toContain("conversation.rename");
+  });
+});
+
 describe("GET /models", () => {
   it("lists only models that are priced and allowed", async () => {
     const deny: PolicyDecisionClient = {

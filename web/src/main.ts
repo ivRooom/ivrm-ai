@@ -11,6 +11,8 @@ import {
   type Project,
 } from "./api.js";
 import { h } from "./dom.js";
+import { icon } from "./icons.js";
+import { matchingTitle, serializeConversation } from "./conversation-tools.js";
 import {
   canSubmitComposer,
   composerRowsForContent,
@@ -18,6 +20,13 @@ import {
 } from "./composer.js";
 import { createRenderer } from "./markdown.js";
 
+try {
+  const theme = localStorage.getItem("ivrm-ai-theme");
+  if (theme === "light" || theme === "dark")
+    document.documentElement.dataset.theme = theme;
+} catch {
+  /* Browser storage is optional. */
+}
 const render = createRenderer(window);
 const root = document.getElementById("app")!;
 const loginUrl =
@@ -39,6 +48,7 @@ type State = {
   /** Composer text, kept across redraws (and put back when a send is refused). */
   draft: string;
   sidebarOpen: boolean;
+  titleQuery: string;
 };
 
 const state: State = {
@@ -54,6 +64,7 @@ const state: State = {
   streaming: null,
   draft: "",
   sidebarOpen: false,
+  titleQuery: "",
   notice: null,
 };
 
@@ -216,6 +227,196 @@ async function toggleArchive(conversation: Conversation) {
   draw();
 }
 
+function openSettings() {
+  const dialog = h("dialog", { class: "dialog", "aria-label": "表示設定" });
+  const close = () => {
+    dialog.close();
+    dialog.remove();
+  };
+  dialog.addEventListener("cancel", () => dialog.remove());
+  const select = h(
+    "select",
+    {
+      "aria-label": "カラーテーマ",
+      onchange: ((event: Event) => {
+        const theme = (event.target as HTMLSelectElement).value;
+        if (theme === "system") delete document.documentElement.dataset.theme;
+        else document.documentElement.dataset.theme = theme;
+        try {
+          localStorage.setItem("ivrm-ai-theme", theme);
+        } catch {
+          /* Current view still works. */
+        }
+      }) as EventListener,
+    },
+    ...[
+      ["system", "システムに合わせる"],
+      ["light", "ライト"],
+      ["dark", "ダーク"],
+    ].map(([value, label]) =>
+      h(
+        "option",
+        {
+          value,
+          selected:
+            value === (document.documentElement.dataset.theme ?? "system"),
+        },
+        label
+      )
+    )
+  );
+  dialog.append(
+    h("h2", {}, "表示設定"),
+    h("label", {}, "カラーテーマ", select),
+    h(
+      "p",
+      { class: "muted" },
+      "Ctrl / ⌘ + K：会話タイトル検索 · Enter：送信 · Shift + Enter：改行"
+    ),
+    h("div", { class: "row end" }, h("button", { onclick: close }, "閉じる"))
+  );
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
+function renameConversation(conversation: Conversation) {
+  const input = h("input", {
+    value: conversation.title,
+    maxlength: "300",
+    required: true,
+    "aria-label": "会話タイトル",
+  });
+  const error = h("p", { role: "alert", class: "muted" });
+  const dialog = h("dialog", {
+    class: "dialog",
+    "aria-label": "タイトルを変更",
+  });
+  const close = () => {
+    dialog.close();
+    dialog.remove();
+  };
+  dialog.addEventListener("cancel", () => dialog.remove());
+  const save = h("button", { type: "submit" }, "保存");
+  dialog.append(
+    h(
+      "form",
+      {
+        onsubmit: (async (event: Event) => {
+          event.preventDefault();
+          if (!input.value.trim()) {
+            error.textContent = "タイトルを入力してください。";
+            return;
+          }
+          save.disabled = true;
+          try {
+            const updated = await api.renameConversation(
+              conversation.id,
+              input.value.trim()
+            );
+            if (state.current?.conversation.id === conversation.id)
+              state.current.conversation = updated;
+            await loadLists();
+            close();
+            draw();
+          } catch (e) {
+            error.textContent = describeError(e);
+            save.disabled = false;
+          }
+        }) as EventListener,
+      },
+      h("h2", {}, "タイトルを変更"),
+      h("label", {}, "会話タイトル", input),
+      error,
+      h(
+        "div",
+        { class: "row end" },
+        h(
+          "button",
+          { type: "button", class: "ghost", onclick: close },
+          "キャンセル"
+        ),
+        save
+      )
+    )
+  );
+  document.body.append(dialog);
+  dialog.showModal();
+  input.select();
+}
+
+function exportConversation(format: "md" | "json") {
+  if (!state.current || state.sending) return;
+  const { conversation, messages } = state.current;
+  const blob = new Blob(
+    [serializeConversation(conversation, messages, format)],
+    {
+      type:
+        format === "json"
+          ? "application/json;charset=utf-8"
+          : "text/markdown;charset=utf-8",
+    }
+  );
+  const url = URL.createObjectURL(blob);
+  const link = h("a", { href: url, download: `conversation.${format}` });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function conversationMenu(conversation: Conversation) {
+  return h(
+    "details",
+    { class: "conversation-menu" },
+    h("summary", { "aria-label": "会話の操作" }, "会話の操作"),
+    h(
+      "div",
+      { class: "menu-panel" },
+      h(
+        "button",
+        {
+          class: "ghost",
+          disabled: !!state.sending,
+          onclick: () => renameConversation(conversation),
+        },
+        "タイトルを変更"
+      ),
+      h(
+        "p",
+        { class: "menu-caption" },
+        "表示中のメッセージを書き出す（最大200件）"
+      ),
+      h(
+        "button",
+        {
+          class: "ghost",
+          disabled: !!state.sending,
+          onclick: () => exportConversation("md"),
+        },
+        "Markdown をダウンロード"
+      ),
+      h(
+        "button",
+        {
+          class: "ghost",
+          disabled: !!state.sending,
+          onclick: () => exportConversation("json"),
+        },
+        "JSON をダウンロード"
+      ),
+      h(
+        "button",
+        {
+          class: "ghost",
+          disabled: !!state.sending,
+          onclick: () => void toggleArchive(conversation),
+        },
+        conversation.archived ? "アーカイブから復元" : "アーカイブに移動"
+      )
+    )
+  );
+}
+
 // ---- project dialog -------------------------------------------------------
 
 function editProject(project: Project | null) {
@@ -366,7 +567,32 @@ function messageView(message: { role: string; content: string }) {
     "article",
     { class: `message ${message.role}` },
     h("div", { class: "who" }, message.role === "user" ? "あなた" : "AI"),
-    body
+    body,
+    h(
+      "div",
+      { class: "message-actions" },
+      h(
+        "button",
+        {
+          type: "button",
+          class: "ghost",
+          "aria-label":
+            message.role === "user"
+              ? "自分のメッセージをコピー"
+              : "回答をコピー",
+          onclick: (async (event: Event) => {
+            const button = event.currentTarget as HTMLButtonElement;
+            try {
+              await navigator.clipboard.writeText(message.content);
+              button.textContent = "コピーしました";
+            } catch {
+              button.textContent = "コピーできませんでした";
+            }
+          }) as EventListener,
+        },
+        "コピー"
+      )
+    )
   );
 }
 
@@ -374,39 +600,49 @@ function messageView(message: { role: string; content: string }) {
 function drawStreaming() {
   const el = document.getElementById("streaming");
   if (!el || state.streaming === null) return;
-  el.textContent = state.streaming || "…";
   const messages = el.closest<HTMLElement>(".messages");
-  if (messages) messages.scrollTop = messages.scrollHeight;
+  const atBottom =
+    messages &&
+    messages.scrollHeight - messages.scrollTop - messages.clientHeight < 160;
+  el.textContent = state.streaming || "…";
+  if (messages && atBottom) messages.scrollTop = messages.scrollHeight;
 }
 
 /** Render the project controls, history filters, and existing conversation list. */
+async function selectProject(id: string) {
+  state.projectFilter = id;
+  try {
+    await loadLists();
+    await goTo(null);
+  } catch (e) {
+    showError(e);
+  }
+}
+
 function sidebar() {
-  const projectSelect = h(
-    "select",
-    {
-      id: "project-filter",
-      "aria-label": "プロジェクト",
-      onchange: (async (event: Event) => {
-        state.projectFilter = (event.target as HTMLSelectElement).value;
-        try {
-          await loadLists();
-        } catch (error) {
-          showError(error);
-          return;
-        }
-        await goTo(null);
-      }) as EventListener,
-    },
-    h("option", { value: "" }, "すべての会話"),
-    ...state.projects.map((p) =>
-      h(
-        "option",
-        { value: p.id, selected: p.id === state.projectFilter },
-        p.name
-      )
-    )
-  );
-  const current = state.projects.find((p) => p.id === state.projectFilter);
+  const search = h("input", {
+    type: "search",
+    class: "history-search",
+    placeholder: "会話タイトルを検索",
+    "aria-label": "会話タイトルを検索",
+    value: state.titleQuery,
+  });
+  search.addEventListener("input", () => {
+    state.titleQuery = search.value;
+    root
+      .querySelectorAll<HTMLElement>(".conversations li[data-title]")
+      .forEach((item) => {
+        item.hidden = !matchingTitle(
+          item.dataset.title ?? "",
+          state.titleQuery
+        );
+      });
+    const empty = root.querySelector<HTMLElement>(".search-empty");
+    if (empty)
+      empty.hidden = state.conversations.some((c) =>
+        matchingTitle(c.title, state.titleQuery)
+      );
+  });
 
   return h(
     "nav",
@@ -432,34 +668,43 @@ function sidebar() {
         type: "button",
         onclick: () => void goTo(null),
       },
-      h("span", { class: "new-chat-icon", "aria-hidden": "true" }, "+"),
+      icon("plus"),
       "新しいチャット"
     ),
     h(
-      "div",
-      { class: "project-picker" },
+      "details",
+      { class: "project-picker", open: true },
+      h("summary", { class: "sidebar-label" }, "プロジェクト"),
       h(
-        "label",
-        { class: "sidebar-label", for: "project-filter" },
-        "プロジェクト"
+        "button",
+        {
+          class: !state.projectFilter ? "item active" : "item",
+          onclick: () => void selectProject(""),
+        },
+        "すべての会話"
       ),
-      h(
-        "div",
-        { class: "project-select-row" },
-        projectSelect,
-        current
-          ? h(
-              "button",
-              {
-                class: "icon-button",
-                type: "button",
-                title: "プロジェクトを編集",
-                "aria-label": "プロジェクトを編集",
-                onclick: () => editProject(current),
-              },
-              "⋯"
-            )
-          : null
+      ...state.projects.map((p) =>
+        h(
+          "div",
+          { class: "project-nav-row" },
+          h(
+            "button",
+            {
+              class: p.id === state.projectFilter ? "item active" : "item",
+              onclick: () => void selectProject(p.id),
+            },
+            p.name
+          ),
+          h(
+            "button",
+            {
+              class: "ghost",
+              "aria-label": p.name + "を編集",
+              onclick: () => editProject(p),
+            },
+            "編集"
+          )
+        )
       )
     ),
     h(
@@ -504,13 +749,17 @@ function sidebar() {
         "アーカイブを表示"
       )
     ),
+    search,
     h(
       "ul",
       { class: "conversations" },
       ...state.conversations.map((c) =>
         h(
           "li",
-          {},
+          {
+            "data-title": c.title,
+            hidden: !matchingTitle(c.title, state.titleQuery),
+          },
           h(
             "button",
             {
@@ -528,9 +777,27 @@ function sidebar() {
           )
         )
       ),
-      state.conversations.length === 0
-        ? h("li", { class: "history-empty" }, "会話はまだありません")
-        : null
+      h(
+        "li",
+        {
+          class: "history-empty search-empty",
+          hidden: state.conversations.some((c) =>
+            matchingTitle(c.title, state.titleQuery)
+          ),
+        },
+        state.conversations.length
+          ? "一致するタイトルはありません"
+          : "会話はまだありません"
+      )
+    ),
+    h(
+      "div",
+      { class: "sidebar-footer" },
+      h(
+        "button",
+        { class: "ghost", onclick: openSettings },
+        "表示設定・ショートカット"
+      )
     )
   );
 }
@@ -600,7 +867,7 @@ function chat() {
       "aria-label": "メッセージを送信",
       disabled: !!state.sending || !modelAvailable(),
     },
-    h("span", { "aria-hidden": "true" }, "↑")
+    icon("send")
   );
   const submit = () => {
     const text = textarea.value;
@@ -641,7 +908,7 @@ function chat() {
 
   return h(
     "main",
-    { class: "chat" },
+    { class: isEmpty ? "chat new-workspace" : "chat" },
     h(
       "header",
       { class: "chat-header" },
@@ -655,18 +922,7 @@ function chat() {
         ),
         h("p", { class: "conversation-caption" }, project?.name ?? "ivRooom AI")
       ),
-      conversation
-        ? h(
-            "button",
-            {
-              class: "ghost archive-button",
-              type: "button",
-              disabled: !!state.sending,
-              onclick: () => void toggleArchive(conversation),
-            },
-            conversation.archived ? "復元" : "アーカイブ"
-          )
-        : null
+      conversation ? conversationMenu(conversation) : null
     ),
     state.notice
       ? h("p", { class: "notice", role: "alert" }, state.notice)
@@ -683,15 +939,11 @@ function chat() {
             "div",
             { class: "welcome" },
             h("span", { class: "welcome-mark", "aria-hidden": "true" }, "i"),
-            h(
-              "h2",
-              { class: "welcome-title" },
-              `こんにちは、${state.me?.username ?? ""} さん`
-            ),
+            h("h2", { class: "welcome-title" }, "今日は、何を考えましょう？"),
             h(
               "p",
               { class: "welcome-copy" },
-              "今日はどんなことを一緒に考えましょう？"
+              "アイデアを整理する。深く調べる。次の一歩をつくる。"
             )
           )
         : null,
@@ -756,7 +1008,7 @@ function chat() {
                     "aria-label": "回答を停止",
                     onclick: () => state.sending?.abort(),
                   },
-                  h("span", { "aria-hidden": "true" }, "■"),
+                  icon("stop"),
                   "停止"
                 )
               : null,
@@ -839,7 +1091,7 @@ function draw() {
               : "ナビゲーションを開く",
             onclick: () => setSidebarOpen(!state.sidebarOpen),
           },
-          h("span", { "aria-hidden": "true" }, "☰")
+          icon("menu")
         ),
         h(
           "div",
@@ -871,6 +1123,24 @@ function draw() {
 
 window.addEventListener("resize", syncSidebarMode);
 window.addEventListener("keydown", (event) => {
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    event.key.toLowerCase() === "k" &&
+    state.me &&
+    !document.querySelector("dialog[open]")
+  ) {
+    event.preventDefault();
+    if (window.matchMedia("(max-width: 900px)").matches) setSidebarOpen(true);
+    root.querySelector<HTMLInputElement>(".history-search")?.focus();
+    return;
+  }
+  if (event.key === "Escape")
+    root
+      .querySelectorAll<HTMLDetailsElement>(".conversation-menu[open]")
+      .forEach((el) => {
+        el.open = false;
+        el.querySelector("summary")?.focus();
+      });
   if (
     event.key === "Escape" &&
     state.sidebarOpen &&
