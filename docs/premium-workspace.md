@@ -133,3 +133,6 @@ Rollbackは本PRをrevertして同Workflowで配備。DB変更なし。既存デ
 ![After](evidence/premium-workspace/after-desktop-dark.jpg)
 
 ![Mobile 320px](evidence/premium-workspace/after-mobile-dark.jpg)
+
+CI初回HEAD `818f5b2` はPostgres17を含む199/199 pass、Docker成功、Semgrep成功。
+Snykはprivate tests quota errorで検査不能。人間approval未取得。本番反映は保留。
