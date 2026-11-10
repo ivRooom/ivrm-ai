@@ -1,4 +1,5 @@
 import { MAX_FORK_MESSAGES, MAX_FORK_BYTES, type ForkResult } from "./types.js";
+import type { UsageBucket } from "./usage.js";
 import type { Pool } from "pg";
 import type {
   ChatStore,
@@ -46,6 +47,30 @@ export const isUuid = (value: string) => UUID.test(value);
 
 export class PostgresChatStore implements ChatStore {
   constructor(private readonly pool: Pool) {}
+
+  async getUsageBuckets(ownerId: string): Promise<UsageBucket[]> {
+    const { rows } = await this.pool.query(
+      `SELECT (m.created_at AT TIME ZONE 'Asia/Tokyo')::date::text AS date,
+      COALESCE(m.model_id, 'unknown') AS model_id, count(*) AS answers,
+      sum(m.input_tokens::bigint + m.output_tokens::bigint) AS tokens,
+      max(m.input_tokens::bigint + m.output_tokens::bigint) AS max_tokens,
+      sum(m.input_tokens::bigint) AS input_tokens, sum(m.output_tokens::bigint) AS output_tokens
+      FROM messages m JOIN conversations c ON c.id = m.conversation_id
+      WHERE c.owner_id = $1 AND m.role = 'assistant' AND m.input_tokens IS NOT NULL
+        AND m.output_tokens IS NOT NULL AND m.cost_micro_usd IS NOT NULL
+      GROUP BY 1, 2 ORDER BY 1, 2`,
+      [ownerId]
+    );
+    return rows.map((r) => ({
+      date: String(r.date),
+      modelId: String(r.model_id),
+      answers: Number(r.answers),
+      tokens: Number(r.tokens),
+      maxTokens: Number(r.max_tokens),
+      inputTokens: Number(r.input_tokens),
+      outputTokens: Number(r.output_tokens),
+    }));
+  }
 
   async createProject(
     ownerId: string,

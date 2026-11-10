@@ -29,3 +29,10 @@ Postgres17込み199/199 tests pass。Semgrep success。Snykはprivate tests quot
 前回案への『まだ弱い』フィードバックに対応。Shell/Sidebar/Welcome/Composer/Messageを
 再設計しcode copy/PC nav collapse/prompt startersを追加。詳細と新証跡はpremium-workspace.md。
 #31の編集・再生成は元会話保持のfork方式で別PRへ。未merge/未deploy。
+
+## プロフィール兼ホーム
+
+#63でプロフィール、利用統計、365日ヒートマップ、モデル実績、プロジェクト・最近の会話を実装。
+#62 UI、#64 編集・再生成に続く変更。元の会話を残す分岐のコピーは統計に再加算しない。
+docs/profile-home.md と証跡を参照。ローカル185件成功、35件はPostgreSQL CIで実行。
+本番変更なし。次は最新CIとレビュー確認、承認後に #62 → #64 → プロフィールPR を統合。

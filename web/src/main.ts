@@ -9,7 +9,9 @@ import {
   type Message,
   type Model,
   type Project,
+  type Usage,
 } from "./api.js";
+import { profileHome } from "./profile-home.js";
 import { h } from "./dom.js";
 import { icon } from "./icons.js";
 import { matchingTitle, serializeConversation } from "./conversation-tools.js";
@@ -34,6 +36,10 @@ const loginUrl =
     ?.content ?? "https://api.ivrm.jp/auth/discord/login";
 
 type State = {
+  home: boolean;
+  usage: Usage | null;
+  usageFailed: boolean;
+  recent: Conversation[];
   me: Me | null;
   models: Model[];
   projects: Project[];
@@ -55,6 +61,10 @@ type State = {
 };
 
 const state: State = {
+  home: location.pathname === "/",
+  usage: null,
+  usageFailed: false,
+  recent: [],
   me: null,
   models: [],
   projects: [],
@@ -82,7 +92,9 @@ function conversationIdFromPath(): string | null {
 function navigate(conversationId: string | null) {
   const path = conversationId
     ? `/c/${encodeURIComponent(conversationId)}`
-    : "/";
+    : state.home
+      ? "/"
+      : "/new";
   if (location.pathname !== path) history.pushState(null, "", path);
 }
 
@@ -92,6 +104,37 @@ function showError(error: unknown) {
   }
   state.notice = describeError(error);
   draw();
+}
+
+let homeLoadSeq = 0;
+async function loadHome() {
+  const seq = ++homeLoadSeq;
+  state.usageFailed = false;
+  const [usage, recent] = await Promise.allSettled([
+    api.usage(),
+    api.conversations(false),
+  ]);
+  if (seq !== homeLoadSeq || !state.home || !state.me) return;
+  if (
+    usage.status === "rejected" &&
+    usage.reason instanceof ApiError &&
+    usage.reason.status === 401
+  ) {
+    showError(usage.reason);
+    return;
+  }
+  state.usage = usage.status === "fulfilled" ? usage.value : null;
+  state.usageFailed = usage.status === "rejected";
+  if (recent.status === "fulfilled") state.recent = recent.value;
+  draw();
+}
+async function openHome() {
+  state.home = true;
+  state.branchSource = null;
+  state.sending?.abort();
+  if (state.sidebarOpen) setSidebarOpen(false);
+  await openConversation(null);
+  await loadHome();
 }
 
 async function loadLists() {
@@ -137,6 +180,7 @@ async function openConversation(id: string | null) {
  * stop button) instead of being drawn under another conversation.
  */
 async function goTo(id: string | null) {
+  state.home = false;
   state.branchSource = null;
   state.sending?.abort();
   if (id !== (state.current?.conversation.id ?? null)) state.draft = "";
@@ -896,6 +940,18 @@ function sidebar() {
       h(
         "button",
         {
+          class: state.home ? "item home-link active" : "item home-link",
+          type: "button",
+          ...(state.home ? { "aria-current": "page" } : {}),
+          onclick: () => void openHome(),
+        },
+        icon("layers"),
+        "ホーム"
+      ),
+
+      h(
+        "button",
+        {
           class: "new-chat",
           type: "button",
           onclick: () => {
@@ -1459,7 +1515,7 @@ function syncSidebarMode() {
   const mobile = window.matchMedia("(max-width: 900px)").matches;
   const layout = root.querySelector<HTMLElement>(".layout");
   const nav = root.querySelector<HTMLElement>("#sidebar");
-  const chatMain = root.querySelector<HTMLElement>(".chat");
+  const chatMain = root.querySelector<HTMLElement>(".chat, .home");
   if (!layout || !nav || !chatMain) return;
   const hidden = mobile ? !state.sidebarOpen : state.sidebarCollapsed;
   layout.classList.toggle(
@@ -1511,7 +1567,21 @@ function draw() {
         onclick: () => setSidebarOpen(false),
       }),
       sidebar(),
-      chat()
+      state.home
+        ? profileHome({
+            me: state.me,
+            usage: state.usage,
+            failed: state.usageFailed,
+            projects: state.projects,
+            recent: state.recent,
+            retry: () => void loadHome(),
+            newChat: () => void goTo(null),
+            toggleNavigation,
+            openConversation: (id) => void goTo(id),
+            openProject: (id) => void selectProject(id),
+            createProject: () => editProject(null),
+          })
+        : chat()
     )
   );
   syncSidebarMode();
@@ -1590,8 +1660,12 @@ async function start() {
     draw();
     return;
   }
-  await openConversation(conversationIdFromPath());
+  if (state.home) await openHome();
+  else await openConversation(conversationIdFromPath());
 }
 
-window.addEventListener("popstate", () => void goTo(conversationIdFromPath()));
+window.addEventListener("popstate", () => {
+  if (location.pathname === "/") void openHome();
+  else void goTo(conversationIdFromPath());
+});
 void start();

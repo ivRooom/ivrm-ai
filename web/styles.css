@@ -1365,3 +1365,329 @@ kbd {
 .edit-message-dialog textarea {
   min-height: 180px;
 }
+
+.home {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.home-toolbar {
+  min-height: var(--header-height);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 clamp(12px, 3vw, 36px);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.home-toolbar .home-new {
+  margin-left: auto;
+  min-height: 34px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.home-content {
+  max-width: 840px;
+  padding: 18px 28px 48px;
+  margin: auto;
+}
+
+.profile-intro {
+  text-align: center;
+  padding: 12px 0 27px;
+}
+
+.profile-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--line);
+  font: 500 32px var(--font-display);
+}
+
+.profile-intro h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 11px 0 2px;
+  overflow-wrap: anywhere;
+}
+
+.profile-intro p,
+.home-note {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.profile-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 13px 0;
+  margin: 0 0 32px;
+}
+
+.profile-metrics > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+  text-align: center;
+  padding-inline: 4px;
+}
+
+.profile-metrics > div + div {
+  border-inline-start: 1px solid var(--line);
+}
+.profile-metrics dt {
+  font-size: 11px;
+  color: var(--muted);
+}
+.profile-metrics dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-section {
+  margin-top: 30px;
+}
+.home-section h2 {
+  margin: 0 0 9px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.home-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.home-section-header h2 {
+  margin-bottom: 0;
+}
+.home-section-header + .home-note {
+  margin-block: 3px 14px;
+}
+.activity-modes {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--sidebar);
+  border-radius: 7px;
+  padding: 2px;
+}
+.activity-modes button {
+  padding: 3px 9px;
+  min-height: 28px;
+  background: transparent;
+  font-size: 11px;
+  color: var(--muted);
+}
+.activity-modes button[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.activity-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.activity-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 11px);
+  grid-auto-columns: 11px;
+  gap: 3px;
+  width: max-content;
+}
+
+.activity-grid.weekly {
+  grid-template-rows: 24px;
+}
+.activity-cell {
+  border-radius: 3px;
+  background: var(--surface-hover);
+}
+.activity-cell.level-1 {
+  background: color-mix(in srgb, var(--accent) 30%, var(--surface-hover));
+}
+.activity-cell.level-2 {
+  background: color-mix(in srgb, var(--accent) 52%, var(--surface-hover));
+}
+.activity-cell.level-3 {
+  background: color-mix(in srgb, var(--accent) 75%, var(--surface-hover));
+}
+.activity-cell.level-4 {
+  background: var(--accent);
+}
+.activity-range {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.activity-details {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.activity-details summary {
+  cursor: pointer;
+  width: fit-content;
+  padding-block: 5px;
+}
+.activity-table-scroll {
+  max-height: 200px;
+  overflow: auto;
+}
+.activity-details table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.activity-details th,
+.activity-details td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.home-models,
+.home-recent {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.home-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+}
+.home-models li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.home-model-icon {
+  display: grid;
+  place-items: center;
+  width: 37px;
+  height: 37px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.home-models li > div {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.home-models strong {
+  font-size: 12px;
+}
+.home-models li > div > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.home-projects {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 9px;
+}
+.home-project,
+.home-recent button {
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 44px;
+  color: var(--text);
+}
+.home-project {
+  border-color: var(--line);
+  background: var(--surface);
+}
+.home-recent button {
+  background: transparent;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding-inline: 4px;
+}
+.home-project > span,
+.home-recent button > span {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.home-project svg,
+.home-recent button svg {
+  color: var(--muted);
+  width: 15px;
+}
+.home-footnote {
+  margin-top: 26px;
+  font-size: 11px;
+}
+.home-usage-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+}
+.home-link svg {
+  width: 16px;
+  color: var(--muted);
+}
+
+@media (max-width: 480px) {
+  .home-content {
+    padding: 12px 16px 35px;
+  }
+  .profile-intro {
+    padding-block: 7px 20px;
+  }
+  .profile-avatar {
+    width: 60px;
+    height: 60px;
+    font-size: 27px;
+  }
+  .profile-metrics {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    row-gap: 12px;
+  }
+  .profile-metrics > div {
+    grid-column: span 2;
+  }
+  .profile-metrics > div:nth-child(n + 4) {
+    grid-column: span 3;
+  }
+  .profile-metrics > div:nth-child(4) {
+    border-inline-start: 0;
+  }
+  .profile-metrics dd {
+    font-size: 17px;
+  }
+  .profile-metrics dt {
+    font-size: 10px;
+  }
+  .home-projects {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

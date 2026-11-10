@@ -1,3 +1,5 @@
+import { dayKey } from "../cost/store.js";
+import type { UsageBucket } from "./usage.js";
 import { randomUUID } from "node:crypto";
 import { MAX_FORK_MESSAGES, MAX_FORK_BYTES, type ForkResult } from "./types.js";
 import type {
@@ -10,7 +12,12 @@ import type {
 
 type ProjectRow = Project & { ownerId: string };
 type ConversationRow = Conversation & { ownerId: string };
-type MessageRow = StoredMessage & { conversationId: string };
+type MessageRow = StoredMessage & {
+  conversationId: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  costMicroUsd: number | null;
+};
 
 /** In-memory ChatStore for tests and local development. */
 export class InMemoryChatStore implements ChatStore {
@@ -19,9 +26,48 @@ export class InMemoryChatStore implements ChatStore {
   private readonly messages: MessageRow[] = [];
   private tick = 0;
 
+  constructor(private readonly epoch = () => Date.UTC(2026, 0, 1)) {}
+
   private stamp(): string {
     // Strictly increasing, so ordering by updatedAt is deterministic in tests.
-    return new Date(Date.UTC(2026, 0, 1) + this.tick++ * 1000).toISOString();
+    return new Date(this.epoch() + this.tick++ * 1000).toISOString();
+  }
+
+  async getUsageBuckets(ownerId: string): Promise<UsageBucket[]> {
+    const buckets = new Map<string, UsageBucket>();
+    for (const m of this.messages) {
+      if (
+        this.conversations.get(m.conversationId)?.ownerId !== ownerId ||
+        m.role !== "assistant" ||
+        m.inputTokens === null ||
+        m.outputTokens === null ||
+        m.costMicroUsd === null
+      )
+        continue;
+      const date = dayKey(new Date(m.createdAt));
+      const modelId = m.modelId ?? "unknown";
+      const key = date + ":" + modelId;
+      const row = buckets.get(key) ?? {
+        date,
+        modelId,
+        answers: 0,
+        tokens: 0,
+        maxTokens: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      };
+      const tokens = m.inputTokens + m.outputTokens;
+      row.answers++;
+      row.tokens += tokens;
+      row.maxTokens = Math.max(row.maxTokens, tokens);
+      row.inputTokens += m.inputTokens;
+      row.outputTokens += m.outputTokens;
+      buckets.set(key, row);
+    }
+    return [...buckets.values()].sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) || a.modelId.localeCompare(b.modelId)
+    );
   }
 
   async createProject(
@@ -200,6 +246,9 @@ export class InMemoryChatStore implements ChatStore {
     };
     const copies = prefix.map((m) => ({
       ...m,
+      inputTokens: null,
+      outputTokens: null,
+      costMicroUsd: null,
       id: randomUUID(),
       conversationId: conversation.id,
       createdAt: at,
@@ -222,7 +271,15 @@ export class InMemoryChatStore implements ChatStore {
     return this.messages
       .filter((m) => m.conversationId === conversationId)
       .slice(-limit)
-      .map(({ conversationId: _ignored, ...message }) => message);
+      .map(
+        ({
+          conversationId: _ignored,
+          inputTokens: _input,
+          outputTokens: _output,
+          costMicroUsd: _cost,
+          ...message
+        }) => message
+      );
   }
 
   async appendMessage(
@@ -235,6 +292,9 @@ export class InMemoryChatStore implements ChatStore {
     const row: MessageRow = {
       id: randomUUID(),
       conversationId,
+      inputTokens: message.inputTokens ?? null,
+      outputTokens: message.outputTokens ?? null,
+      costMicroUsd: message.costMicroUsd ?? null,
       role: message.role,
       content: message.content,
       modelId: message.modelId ?? null,
@@ -242,7 +302,13 @@ export class InMemoryChatStore implements ChatStore {
     };
     this.messages.push(row);
     conversation.updatedAt = this.stamp();
-    const { conversationId: _ignored, ...stored } = row;
+    const {
+      conversationId: _ignored,
+      inputTokens: _input,
+      outputTokens: _output,
+      costMicroUsd: _cost,
+      ...stored
+    } = row;
     return stored;
   }
 }

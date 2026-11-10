@@ -12,6 +12,7 @@ import {
   type ChatMessage,
   type StreamEvent,
 } from "../models/types.js";
+import { summarizeUsage } from "./usage.js";
 import { ForkLimiter } from "./fork-limiter.js";
 import type { ChatStore, StoredMessage } from "./types.js";
 
@@ -152,6 +153,27 @@ export function chatRoutes(deps: ChatDeps) {
       ? json(503, { error: "unavailable" })
       : json(403, { error: "forbidden" });
   }
+
+  app.get("/usage", async (c) => {
+    const usage = summarizeUsage(
+      await store.getUsageBuckets(c.get("session").userId),
+      now()
+    );
+    const labels = new Map(
+      catalog.list().map((model) => [model.id, model.label])
+    );
+    return json(
+      200,
+      {
+        ...usage,
+        models: usage.models.map((model) => ({
+          ...model,
+          label: labels.get(model.modelId) ?? model.modelId,
+        })),
+      },
+      { "cache-control": "private, no-store" }
+    );
+  });
 
   app.get("/models", async (c) => {
     const session = c.get("session");
