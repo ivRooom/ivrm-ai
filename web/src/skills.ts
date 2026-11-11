@@ -51,3 +51,66 @@ export function openSkills(apply: (prompt: string) => void) {
   document.body.append(dialog);
   dialog.showModal();
 }
+
+export function matchingSkills(content: string): string[] {
+  const paragraphs = new Set(
+    content
+      .trim()
+      .split(/\r?\n[ \t]*\r?\n/)
+      .map((paragraph) => paragraph.trim())
+  );
+  return skills
+    .filter((skill) => paragraphs.has(skill.prompt))
+    .map((skill) => skill.title);
+}
+
+export function skillHistory(
+  messages: readonly { id: string; role: string; content: string }[]
+) {
+  const entries = messages
+    .filter(
+      (message) => message.role === "user" && !message.id.startsWith("pending-")
+    )
+    .flatMap((message) =>
+      matchingSkills(message.content).map((title) => ({
+        id: message.id,
+        title,
+      }))
+    )
+    .reverse();
+  if (!entries.length) return null;
+
+  return h(
+    "details",
+    { class: "context-usage" },
+    h("summary", {}, "スキル履歴 · " + entries.length + "件"),
+    h(
+      "p",
+      {},
+      "表示中の送信済みメッセージから、組み込みの定型文と一致する指示を表示します。"
+    ),
+    h(
+      "ul",
+      {},
+      ...entries.map(({ id, title }) =>
+        h(
+          "li",
+          {},
+          h(
+            "button",
+            {
+              class: "text-button",
+              type: "button",
+              onclick: () => {
+                const target = document.getElementById("message-" + id);
+                target?.focus({ preventScroll: true });
+                target?.scrollIntoView({ block: "nearest" });
+              },
+            },
+            title
+          )
+        )
+      )
+    )
+  );
+}
