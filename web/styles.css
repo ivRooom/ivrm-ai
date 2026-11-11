@@ -1746,3 +1746,21 @@ kbd {
 .composer-skill {
   flex: none;
 }
+
+.integration-dialog {
+  max-height: 85dvh;
+  overflow: auto;
+}
+
+.integration-form {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.integration-form [hidden] {
+  display: none;
+}
+
+.integration-dialog li {
+  overflow-wrap: anywhere;
+}

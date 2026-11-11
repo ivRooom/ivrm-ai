@@ -1,3 +1,4 @@
+import { openIntegrations, registeredSkills } from "./integrations.js";
 import { openSkills, skillHistory } from "./skills.js";
 import {
   api,
@@ -330,6 +331,20 @@ function openSettings() {
   );
   dialog.append(
     h("h2", {}, "表示設定"),
+    h(
+      "button",
+      {
+        type: "button",
+        onclick: () => {
+          const owner = state.me?.id;
+          if (owner) {
+            close();
+            openIntegrations(owner);
+          }
+        },
+      },
+      "MCP・プラグイン"
+    ),
     h("label", {}, "カラーテーマ", select),
     h(
       "p",
@@ -1484,13 +1499,16 @@ function chat() {
                 type: "button",
                 disabled: !!state.sending,
                 onclick: () =>
-                  openSkills((prompt) => {
-                    textarea.value = textarea.value.trimEnd()
-                      ? textarea.value.trimEnd() + "\n\n" + prompt
-                      : prompt;
-                    textarea.dispatchEvent(new Event("input"));
-                    textarea.focus();
-                  }),
+                  openSkills(
+                    (prompt) => {
+                      textarea.value = textarea.value.trimEnd()
+                        ? textarea.value.trimEnd() + "\n\n" + prompt
+                        : prompt;
+                      textarea.dispatchEvent(new Event("input"));
+                      textarea.focus();
+                    },
+                    state.me ? registeredSkills(state.me.id) : []
+                  ),
               },
               "スキル"
             ),
