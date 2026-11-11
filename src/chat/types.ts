@@ -49,6 +49,8 @@ export type ForkResult =
  * exist (null / empty), so callers cannot leak or modify other users' data.
  */
 export interface ChatStore {
+  /** Usage contains no prompt/answer text and is scoped to the conversation owner. */
+  getUsageBuckets(ownerId: string): Promise<import("./usage.js").UsageBucket[]>;
   createProject(
     ownerId: string,
     input: { name: string; instructions: string }

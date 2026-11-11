@@ -12,7 +12,7 @@ import { loadWebAssets } from "../src/web.js";
 
 if (process.env["NODE_ENV"] === "production")
   throw Error("Preview must never run in production");
-const port = 4320;
+const port = 4321;
 const origin = `http://127.0.0.1:${port}`;
 const now = () => new Date("2026-11-11T03:00:00Z");
 const spec: ModelSpec = {
@@ -49,11 +49,32 @@ const model: ChatModel = {
     };
   },
 };
-const store = new InMemoryChatStore();
+let seedTime = now().getTime() - 364 * 86_400_000;
+const store = new InMemoryChatStore(() => seedTime);
 const project = await store.createProject("preview", {
   name: "プロダクト開発",
   instructions: "要点を簡潔に説明する。",
 });
+const past = (await store.createConversation("preview", {
+  projectId: project.id,
+  title: "利用実績のプレビュー用会話",
+  modelId: spec.id,
+}))!;
+for (let day = 0; day < 365; day++) {
+  const sample = (day * 37 + (day % 13) * 11) % 97;
+  if (sample > Math.min(80, 14 + day / 5) && day < 361) continue;
+  seedTime = now().getTime() - (364 - day) * 86_400_000;
+  await store.appendMessage("preview", past.id, {
+    role: "assistant",
+    content: "合成データによる利用統計の例。",
+    modelId: spec.id,
+    inputTokens: sample * 190 + 180,
+    outputTokens: sample * 30 + 50,
+    costMicroUsd: 1,
+  });
+}
+seedTime = now().getTime();
+await store.setConversationArchived("preview", past.id, true);
 const source = (await store.createConversation("preview", {
   projectId: project.id,
   title: "日常で使いたいAIの設計",
@@ -96,7 +117,7 @@ const app = createApp({
       verify: async () => ({
         userId: "preview",
         discordUserId: "preview",
-        username: "Preview",
+        username: "プレビュー",
         roles: ["member"],
         isAdmin: false,
         cookie: "synthetic-only",

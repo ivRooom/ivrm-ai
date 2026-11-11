@@ -9,6 +9,48 @@ export function chatStoreContract(
   make: () => Promise<ChatStore>
 ) {
   describe(`ChatStore contract: ${name}`, () => {
+    it("isolates stored answer usage and never recounts forked history", async () => {
+      const store = await make();
+      const source = (await store.createConversation("alice", {
+        projectId: null,
+        title: "source",
+        modelId: "m1",
+      }))!;
+      await store.appendMessage("alice", source.id, {
+        role: "assistant",
+        content: "complete",
+        modelId: "m1",
+        inputTokens: 12,
+        outputTokens: 8,
+        costMicroUsd: 0,
+      });
+      await store.appendMessage("alice", source.id, {
+        role: "assistant",
+        content: "no usage",
+        modelId: "m1",
+      });
+      const target = (await store.appendMessage("alice", source.id, {
+        role: "user",
+        content: "target",
+      }))!;
+      const result = await store.forkConversation(
+        "alice",
+        source.id,
+        target.id,
+        "m1"
+      );
+      expect(result && "conversation" in result).toBe(true);
+      await store.setConversationArchived("alice", source.id, true);
+      expect(await store.getUsageBuckets("alice")).toEqual([
+        expect.objectContaining({
+          modelId: "m1",
+          answers: 1,
+          tokens: 20,
+          maxTokens: 20,
+        }),
+      ]);
+      expect(await store.getUsageBuckets("bob")).toEqual([]);
+    });
     it("forks before an owned user message, keeps the source, and uses new ids", async () => {
       const store = await make();
       const source = (await store.createConversation("alice", {

@@ -282,6 +282,32 @@ describe("POST conversation fork", () => {
   });
 });
 
+it("serves private owner-only usage without revealing message text", async () => {
+  const { app, call, conversation, store } = setup();
+  const source = await conversation("alice");
+  await store.appendMessage("alice", source.id, {
+    role: "assistant",
+    content: "private answer",
+    modelId: "m1",
+    inputTokens: 9,
+    outputTokens: 4,
+    costMicroUsd: 1,
+  });
+  expect((await app.request("/api/usage")).status).toBe(401);
+  const response = await call("alice", "GET", "/usage");
+  expect(response.headers.get("cache-control")).toBe("private, no-store");
+  const body = await response.text();
+  expect(body).not.toContain("private answer");
+  expect(JSON.parse(body)).toMatchObject({
+    answers: 1,
+    totalTokens: 13,
+    timezone: "Asia/Tokyo",
+  });
+  expect(
+    await (await call("bob", "GET", "/usage?ownerId=alice")).json()
+  ).toMatchObject({ answers: 0, totalTokens: 0 });
+});
+
 describe("GET /models", () => {
   it("lists only models that are priced and allowed", async () => {
     const deny: PolicyDecisionClient = {

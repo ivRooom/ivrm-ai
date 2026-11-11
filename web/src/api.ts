@@ -24,6 +24,16 @@ export type Message = {
 };
 export type Me = { id: string; username: string };
 
+export type Usage = {
+  totalTokens: number;
+  maxTokens: number;
+  answers: number;
+  longestStreak: number;
+  currentStreak: number;
+  activeDays: number;
+  daily: { date: string; tokens: number; answers: number }[];
+  models: { modelId: string; label: string; tokens: number; answers: number }[];
+};
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -66,6 +76,7 @@ async function call<T>(
 }
 
 export const api = {
+  usage: () => call<Usage>("GET", "/usage"),
   me: () => call<{ user: Me }>("GET", "/me").then((r) => r.user),
   models: () =>
     call<{ models: Model[] }>("GET", "/models").then((r) => r.models),
