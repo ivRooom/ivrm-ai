@@ -1,3 +1,4 @@
+import { openSkills } from "./skills.js";
 import {
   api,
   ApiError,
@@ -1470,6 +1471,23 @@ function chat() {
               icon("model"),
               modelSelect,
               icon("chevron")
+            ),
+            h(
+              "button",
+              {
+                class: "text-button composer-skill",
+                type: "button",
+                disabled: !!state.sending,
+                onclick: () =>
+                  openSkills((prompt) => {
+                    textarea.value = textarea.value.trimEnd()
+                      ? textarea.value.trimEnd() + "\n\n" + prompt
+                      : prompt;
+                    textarea.dispatchEvent(new Event("input"));
+                    textarea.focus();
+                  }),
+              },
+              "スキル"
             ),
             h("span", { class: "grow" }),
             h(
