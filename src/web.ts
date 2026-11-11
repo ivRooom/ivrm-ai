@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { Context } from "hono";
@@ -10,6 +11,8 @@ export type WebAssets = {
   indexHtml: string;
   appJs: string;
   stylesCss: string;
+  appPath?: string;
+  stylesPath?: string;
 };
 
 // The page renders model output. Even after sanitizing (web/src/markdown.ts),
@@ -52,8 +55,17 @@ export async function loadWebAssets(
     readFile(path.join(dir, "assets/app.js"), "utf8"),
     readFile(path.join(dir, "assets/styles.css"), "utf8"),
   ]);
+  const hash = (content: string) =>
+    createHash("sha256").update(content).digest("hex").slice(0, 16);
+  const appPath = "/assets/app-" + hash(appJs) + ".js";
+  const stylesPath = "/assets/styles-" + hash(stylesCss) + ".css";
   return {
-    indexHtml: html.replace("__IVRM_LOGIN_URL__", escapeAttribute(loginUrl)),
+    indexHtml: html
+      .replace("/assets/app.js", appPath)
+      .replace("/assets/styles.css", stylesPath)
+      .replace("__IVRM_LOGIN_URL__", escapeAttribute(loginUrl)),
+    appPath,
+    stylesPath,
     appJs,
     stylesCss,
   };
@@ -69,10 +81,10 @@ export function webHandler(assets: WebAssets) {
     let body: string;
     let type: string;
     let cache = "no-cache";
-    if (p === "/assets/app.js") {
+    if (p === "/assets/app.js" || p === assets.appPath) {
       body = assets.appJs;
       type = "text/javascript; charset=utf-8";
-    } else if (p === "/assets/styles.css") {
+    } else if (p === "/assets/styles.css" || p === assets.stylesPath) {
       body = assets.stylesCss;
       type = "text/css; charset=utf-8";
     } else if (p.startsWith("/assets/")) {

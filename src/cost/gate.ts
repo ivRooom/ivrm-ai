@@ -8,7 +8,7 @@ import {
 } from "../models/types.js";
 import { costMicroUsd, reserveMicroUsd } from "./estimate.js";
 import type { CostLimits } from "./limits.js";
-import type { LimitReason, UsageStore } from "./store.js";
+import { nextDayReset, type LimitReason, type UsageStore } from "./store.js";
 
 export type GateErrorCode =
   "kill_switch" | "request_too_large" | "limit_exceeded" | "store_unavailable";
@@ -54,6 +54,17 @@ export type CostGateDeps = {
  */
 export class CostGate {
   constructor(private readonly deps: CostGateDeps) {}
+
+  async dailyBudget(userId: string, now: Date) {
+    const usedMicroUsd = await this.deps.store.readUserDaily(userId, now);
+    const limitMicroUsd = this.deps.limits.userDailyMicroUsd;
+    return {
+      usedMicroUsd,
+      limitMicroUsd,
+      remainingMicroUsd: Math.max(0, limitMicroUsd - usedMicroUsd),
+      resetsAt: nextDayReset(now),
+    };
+  }
 
   async generate(request: GatedRequest): Promise<GenerateResult> {
     const prepared = await this.prepare(request);

@@ -23,6 +23,16 @@ export const STALE_AFTER_MINUTES = 15;
 export class PostgresUsageStore implements UsageStore {
   constructor(private readonly pool: Pool) {}
 
+  async readUserDaily(userId: string, now: Date): Promise<number> {
+    const { rows } = await this.pool.query(
+      `SELECT COALESCE(SUM(COALESCE(actual_micro_usd, amount_micro_usd)), 0) AS used
+       FROM usage_reservations
+       WHERE user_id = $1 AND day = $2 AND status <> 'released'`,
+      [userId, dayKey(now)]
+    );
+    return Number(rows[0].used);
+  }
+
   async reserve(input: {
     userId: string;
     amountMicroUsd: number;

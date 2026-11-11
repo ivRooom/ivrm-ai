@@ -49,6 +49,10 @@ export function usageStoreContract(
         reason: "user_daily",
       });
       if (first.ok) await store.settle(first.reservationId, 100);
+      expect(await store.readUserDaily("u1", t0)).toBe(100);
+      expect(
+        await store.readUserDaily("u1", new Date("2026-10-16T15:00:00Z"))
+      ).toBe(0);
       expect(await reserve(store, { amount: 600 })).toMatchObject({ ok: true });
     });
 
