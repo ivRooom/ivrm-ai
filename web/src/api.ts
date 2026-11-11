@@ -24,7 +24,9 @@ export type Message = {
 };
 export type Me = { id: string; username: string };
 
+export type CostPeriod = { start: string; costMicroUsd: number };
 export type Usage = {
+  costs?: Record<"day" | "week" | "month", CostPeriod[]>;
   totalTokens: number;
   maxTokens: number;
   answers: number;

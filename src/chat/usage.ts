@@ -8,6 +8,7 @@ export type UsageBucket = {
   maxTokens: number;
   inputTokens: number;
   outputTokens: number;
+  costMicroUsd: number;
 };
 
 /** Stored completed answers only: excludes copied history and failed/unknown reservations. */
@@ -15,6 +16,7 @@ export function summarizeUsage(buckets: UsageBucket[], now: Date) {
   const today = dayKey(now);
   const dayMs = (day: string) => Date.parse(`${day}T00:00:00Z`);
   const start = dayMs(today) - 364 * 86_400_000;
+  const costs = summarizeCosts(buckets, today);
   const days = new Map<
     string,
     { date: string; tokens: number; answers: number }
@@ -88,8 +90,36 @@ export function summarizeUsage(buckets: UsageBucket[], now: Date) {
     currentStreak,
     activeDays: daily.filter((d) => d.answers > 0).length,
     daily,
+    costs,
     models: [...models.values()].sort(
       (a, b) => b.answers - a.answers || a.modelId.localeCompare(b.modelId)
+    ),
+  };
+}
+
+function summarizeCosts(buckets: UsageBucket[], today: string) {
+  const date = new Date(today + "T00:00:00Z");
+  const at = (offset: number) =>
+    new Date(date.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
+  const monday = -((date.getUTCDay() + 6) % 7);
+  const group = (starts: string[]) => {
+    const periods = starts.map((start) => ({ start, costMicroUsd: 0 }));
+    for (const bucket of buckets) {
+      if (bucket.date > today) continue;
+      const period = periods.find(({ start }) => start <= bucket.date);
+      if (period) period.costMicroUsd += bucket.costMicroUsd;
+    }
+    return periods;
+  };
+  return {
+    day: group(Array.from({ length: 7 }, (_, i) => at(-i))),
+    week: group(Array.from({ length: 8 }, (_, i) => at(monday - 7 * i))),
+    month: group(
+      Array.from({ length: 12 }, (_, i) =>
+        new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() - i, 1))
+          .toISOString()
+          .slice(0, 10)
+      )
     ),
   };
 }

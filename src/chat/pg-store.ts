@@ -54,7 +54,8 @@ export class PostgresChatStore implements ChatStore {
       COALESCE(m.model_id, 'unknown') AS model_id, count(*) AS answers,
       sum(m.input_tokens::bigint + m.output_tokens::bigint) AS tokens,
       max(m.input_tokens::bigint + m.output_tokens::bigint) AS max_tokens,
-      sum(m.input_tokens::bigint) AS input_tokens, sum(m.output_tokens::bigint) AS output_tokens
+      sum(m.input_tokens::bigint) AS input_tokens, sum(m.output_tokens::bigint) AS output_tokens,
+      sum(m.cost_micro_usd) AS cost_micro_usd
       FROM messages m JOIN conversations c ON c.id = m.conversation_id
       WHERE c.owner_id = $1 AND m.role = 'assistant' AND m.input_tokens IS NOT NULL
         AND m.output_tokens IS NOT NULL AND m.cost_micro_usd IS NOT NULL
@@ -69,6 +70,7 @@ export class PostgresChatStore implements ChatStore {
       maxTokens: Number(r.max_tokens),
       inputTokens: Number(r.input_tokens),
       outputTokens: Number(r.output_tokens),
+      costMicroUsd: Number(r.cost_micro_usd),
     }));
   }
 
