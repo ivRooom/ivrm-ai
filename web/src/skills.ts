@@ -21,13 +21,16 @@ const skills = [
   },
 ] as const;
 
-export function openSkills(apply: (prompt: string) => void) {
+export function openSkills(
+  apply: (prompt: string) => void,
+  custom: { title: string; description: string; prompt: string }[] = []
+) {
   const dialog = h("dialog", { class: "dialog", "aria-label": "会話のスキル" });
   dialog.addEventListener("close", () => dialog.remove(), { once: true });
   dialog.append(
     h("h2", {}, "会話のスキル"),
     h("p", {}, "選んだ指示を入力欄に追加します。送信前に編集できます。"),
-    ...skills.map((skill) =>
+    ...[...skills, ...custom].map((skill) =>
       h(
         "button",
         {
