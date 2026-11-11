@@ -1730,3 +1730,19 @@ kbd {
   text-align: end;
   font-variant-numeric: tabular-nums;
 }
+
+.skill-choice {
+  display: grid;
+  gap: 0.25rem;
+  text-align: start;
+  padding: 0.6rem;
+}
+
+.skill-choice span {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.composer-skill {
+  flex: none;
+}
