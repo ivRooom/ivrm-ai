@@ -79,20 +79,20 @@ it("aggregates costs across models, Monday and calendar month boundaries", () =>
     [
       bucket("2026-10-31", 7),
       bucket("2026-11-01", 3),
-      bucket("2026-11-02", 5),
+      { ...bucket("2026-11-02", 5), costMicroUsd: 6 },
       bucket("2026-11-02", 11, "m2"),
       bucket("2026-11-03", 99),
     ],
     new Date("2026-11-01T15:00:00Z")
   );
 
-  expect(costs.day[0]).toEqual({ start: "2026-11-02", costMicroUsd: 16 });
+  expect(costs.day[0]).toEqual({ start: "2026-11-02", costMicroUsd: 17 });
   expect(costs.week.slice(0, 2)).toEqual([
-    { start: "2026-11-02", costMicroUsd: 16 },
+    { start: "2026-11-02", costMicroUsd: 17 },
     { start: "2026-10-26", costMicroUsd: 10 },
   ]);
   expect(costs.month.slice(0, 3)).toEqual([
-    { start: "2026-11-01", costMicroUsd: 19 },
+    { start: "2026-11-01", costMicroUsd: 20 },
     { start: "2026-10-01", costMicroUsd: 7 },
     { start: "2026-09-01", costMicroUsd: 0 },
   ]);
