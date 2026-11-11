@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { MAX_FORK_MESSAGES, MAX_FORK_BYTES, type ForkResult } from "./types.js";
 import type {
   ChatStore,
+  ContextUsage,
   Conversation,
   NewMessage,
   Project,
@@ -261,6 +262,33 @@ export class InMemoryChatStore implements ChatStore {
     return {
       conversation: strip(conversation),
       draft: history[index]!.content,
+    };
+  }
+
+  async latestContextUsage(
+    ownerId: string,
+    conversationId: string
+  ): Promise<ContextUsage | null> {
+    if (this.conversations.get(conversationId)?.ownerId !== ownerId)
+      return null;
+    const message = this.messages.findLast(
+      (m) =>
+        m.conversationId === conversationId &&
+        m.role === "assistant" &&
+        m.inputTokens !== null &&
+        m.outputTokens !== null
+    );
+    if (
+      !message ||
+      message.inputTokens === null ||
+      message.outputTokens === null
+    )
+      return null;
+    return {
+      modelId: message.modelId,
+      inputTokens: message.inputTokens,
+      outputTokens: message.outputTokens,
+      measuredAt: message.createdAt,
     };
   }
 

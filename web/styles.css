@@ -1324,6 +1324,20 @@ kbd {
   width: min(100%, var(--content-width));
   margin-inline: auto;
 }
+.context-usage {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  padding-block: 0.5rem;
+}
+
+.context-usage summary {
+  cursor: pointer;
+}
+
+.context-usage p {
+  margin: 0.25rem 0;
+}
+
 .workspace-notices:empty {
   display: none;
 }

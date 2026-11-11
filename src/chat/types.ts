@@ -25,6 +25,13 @@ export type StoredMessage = {
   createdAt: string;
 };
 
+export type ContextUsage = {
+  modelId: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  measuredAt: string;
+};
+
 export type NewMessage = {
   role: "user" | "assistant";
   content: string;
@@ -102,6 +109,10 @@ export interface ChatStore {
   ): Promise<ForkResult>;
 
   /** The latest `limit` messages, oldest first. Null if not the owner's. */
+  latestContextUsage(
+    ownerId: string,
+    conversationId: string
+  ): Promise<ContextUsage | null>;
   listMessages(
     ownerId: string,
     conversationId: string,

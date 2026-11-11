@@ -16,6 +16,12 @@ export type Conversation = {
   archived: boolean;
   updatedAt: string;
 };
+export type ContextUsage = {
+  modelId: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  measuredAt: string;
+};
 export type Message = {
   id: string;
   role: "user" | "assistant";
@@ -114,10 +120,11 @@ export const api = {
       (r) => r.conversation
     ),
   conversation: (id: string) =>
-    call<{ conversation: Conversation; messages: Message[] }>(
-      "GET",
-      `/conversations/${encodeURIComponent(id)}`
-    ),
+    call<{
+      conversation: Conversation;
+      messages: Message[];
+      contextUsage?: ContextUsage | null;
+    }>("GET", `/conversations/${encodeURIComponent(id)}`),
   forkConversation: (id: string, messageId: string, modelId: string) =>
     call<{ conversation: Conversation; draft: string }>(
       "POST",

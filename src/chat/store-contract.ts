@@ -51,6 +51,17 @@ export function chatStoreContract(
         }),
       ]);
       expect(await store.getUsageBuckets("bob")).toEqual([]);
+      expect(await store.latestContextUsage("alice", source.id)).toMatchObject({
+        modelId: "m1",
+        inputTokens: 12,
+        outputTokens: 8,
+      });
+      expect(await store.latestContextUsage("bob", source.id)).toBeNull();
+      if (result && "conversation" in result) {
+        expect(
+          await store.latestContextUsage("alice", result.conversation.id)
+        ).toBeNull();
+      }
     });
     it("forks before an owned user message, keeps the source, and uses new ids", async () => {
       const store = await make();
