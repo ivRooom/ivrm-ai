@@ -25,6 +25,10 @@ export class InMemoryUsageStore implements UsageStore {
   private readonly reservations = new Map<string, Reservation>();
   private inFlight = 0;
 
+  async readUserDaily(userId: string, now: Date): Promise<number> {
+    return this.usage(userId, now).userDaily;
+  }
+
   async reserve(input: {
     userId: string;
     amountMicroUsd: number;

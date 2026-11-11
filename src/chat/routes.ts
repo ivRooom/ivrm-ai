@@ -155,10 +155,13 @@ export function chatRoutes(deps: ChatDeps) {
   }
 
   app.get("/usage", async (c) => {
-    const usage = summarizeUsage(
-      await store.getUsageBuckets(c.get("session").userId),
-      now()
-    );
+    const owner = c.get("session").userId;
+    const asOf = now();
+    const [buckets, dailyBudget] = await Promise.all([
+      store.getUsageBuckets(owner),
+      gate.dailyBudget(owner, asOf),
+    ]);
+    const usage = summarizeUsage(buckets, asOf);
     const labels = new Map(
       catalog.list().map((model) => [model.id, model.label])
     );
@@ -166,6 +169,7 @@ export function chatRoutes(deps: ChatDeps) {
       200,
       {
         ...usage,
+        dailyBudget,
         models: usage.models.map((model) => ({
           ...model,
           label: labels.get(model.modelId) ?? model.modelId,

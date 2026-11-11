@@ -256,6 +256,7 @@ describe("CostGate.generate", () => {
 
   it("refuses when the store is unavailable (fail closed)", async () => {
     const broken: UsageStore = {
+      readUserDaily: vi.fn(),
       reserve: vi.fn().mockRejectedValue(new Error("db down")),
       settle: vi.fn(),
       release: vi.fn(),
@@ -271,6 +272,7 @@ describe("CostGate.generate", () => {
     const onSettleError = vi.fn();
     const store = new InMemoryUsageStore();
     const flaky: UsageStore = {
+      readUserDaily: (userId, now) => store.readUserDaily(userId, now),
       reserve: (input) => store.reserve(input),
       settle: vi.fn().mockRejectedValue(new Error("db down")),
       release: (id) => store.release(id),

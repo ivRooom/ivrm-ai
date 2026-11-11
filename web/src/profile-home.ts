@@ -1,4 +1,5 @@
 import type { Conversation, Me, Project, Usage } from "./api.js";
+import { dailyBudget } from "./daily-budget.js";
 import { costHistory } from "./cost-history.js";
 import { h } from "./dom.js";
 import { icon } from "./icons.js";
@@ -238,6 +239,9 @@ export function profileHome(input: {
               { class: "home-note", role: "status" },
               "利用統計を読み込んでいます…"
             ),
+      usage?.dailyBudget && usage.asOf
+        ? dailyBudget(usage.dailyBudget, usage.asOf)
+        : null,
       usage?.costs ? costHistory(usage.costs) : null,
       usage
         ? h(

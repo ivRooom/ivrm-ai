@@ -12,6 +12,7 @@ export type ReserveResult =
  * (a Postgres implementation does this in one transaction).
  */
 export interface UsageStore {
+  readUserDaily(userId: string, now: Date): Promise<number>;
   reserve(input: {
     userId: string;
     amountMicroUsd: number;
@@ -29,6 +30,11 @@ const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 /** Day and month windows follow Japan time (the operators' calendar). */
 export function dayKey(now: Date): string {
   return new Date(now.getTime() + JST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+export function nextDayReset(now: Date): string {
+  const midnight = Date.parse(dayKey(now) + "T00:00:00+09:00");
+  return new Date(midnight + 86_400_000).toISOString();
 }
 
 export function monthKey(now: Date): string {

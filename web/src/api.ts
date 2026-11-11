@@ -32,6 +32,13 @@ export type Me = { id: string; username: string };
 
 export type CostPeriod = { start: string; costMicroUsd: number };
 export type Usage = {
+  asOf?: string;
+  dailyBudget?: {
+    usedMicroUsd: number;
+    limitMicroUsd: number;
+    remainingMicroUsd: number;
+    resetsAt: string;
+  };
   costs?: Record<"day" | "week" | "month", CostPeriod[]>;
   totalTokens: number;
   maxTokens: number;
