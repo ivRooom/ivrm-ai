@@ -1,4 +1,4 @@
-import { openSkills } from "./skills.js";
+import { openSkills, skillHistory } from "./skills.js";
 import {
   api,
   ApiError,
@@ -825,7 +825,11 @@ function messageView(message: Message) {
     state.models.find((m) => m.id === message.modelId)?.label ?? "ivRooom AI";
   return h(
     "article",
-    { class: `message ${message.role}` },
+    {
+      class: `message ${message.role}`,
+      id: "message-" + message.id,
+      tabindex: "-1",
+    },
     h(
       "div",
       { class: "who" },
@@ -1328,6 +1332,7 @@ function chat() {
     h(
       "div",
       { class: "workspace-notices" },
+      conversation ? skillHistory(messages) : null,
       conversation && contextUsage
         ? h(
             "details",
