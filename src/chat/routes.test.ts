@@ -143,6 +143,145 @@ describe("PATCH conversation title", () => {
   });
 });
 
+describe("POST conversation fork", () => {
+  it("forks without inference, then sends the question once through the existing gate", async () => {
+    const model = scriptedModel();
+    const { call, conversation, store, audit } = setup({ model });
+    const source = await conversation();
+    await store.appendMessage("alice", source.id, {
+      role: "user",
+      content: "context",
+    });
+    await store.appendMessage("alice", source.id, {
+      role: "assistant",
+      content: "context answer",
+    });
+    const target = (await store.appendMessage("alice", source.id, {
+      role: "user",
+      content: "original question",
+    }))!;
+    await store.appendMessage("alice", source.id, {
+      role: "assistant",
+      content: "excluded answer",
+    });
+    const original = await store.listMessages("alice", source.id, 200);
+    const response = await call(
+      "alice",
+      "POST",
+      `/conversations/${source.id}/fork`,
+      { messageId: target.id, modelId: "m1" }
+    );
+    expect(response.status).toBe(201);
+    const result = await response.json();
+    expect(model.requests).toEqual([]);
+    expect(JSON.stringify(audit.entries)).not.toContain("original question");
+    const sent = await call(
+      "alice",
+      "POST",
+      `/conversations/${result.conversation.id}/messages`,
+      { text: "edited question", modelId: "m1" }
+    );
+    expect(sent.status).toBe(200);
+    await sent.text();
+    expect(model.requests[0]!.messages.map((m) => m.text)).toEqual([
+      "context",
+      "context answer",
+      "edited question",
+    ]);
+    expect(await store.listMessages("alice", source.id, 200)).toEqual(original);
+  });
+
+  it("enforces source/message ownership, role and strict input", async () => {
+    const { call, conversation, store } = setup();
+    const source = await conversation();
+    const other = await conversation();
+    const user = (await store.appendMessage("alice", source.id, {
+      role: "user",
+      content: "secret",
+    }))!;
+    const assistant = (await store.appendMessage("alice", source.id, {
+      role: "assistant",
+      content: "answer",
+    }))!;
+    const input = { messageId: user.id, modelId: "m1" };
+    expect(
+      (await call("bob", "POST", `/conversations/${source.id}/fork`, input))
+        .status
+    ).toBe(404);
+    expect(
+      (await call("alice", "POST", `/conversations/${other.id}/fork`, input))
+        .status
+    ).toBe(404);
+    expect(
+      (
+        await call("alice", "POST", `/conversations/${source.id}/fork`, {
+          ...input,
+          messageId: assistant.id,
+        })
+      ).status
+    ).toBe(404);
+    expect(
+      (
+        await call("alice", "POST", `/conversations/${source.id}/fork`, {
+          ...input,
+          ownerId: "bob",
+        })
+      ).status
+    ).toBe(400);
+    expect(
+      (
+        await call("alice", "POST", `/conversations/${source.id}/fork`, {
+          ...input,
+          modelId: "unknown",
+        })
+      ).status
+    ).not.toBe(201);
+  });
+
+  it("does not bypass kill-switch and refuses repeated storage copies", async () => {
+    const model = scriptedModel();
+    const { call, conversation, store } = setup({ model, killSwitch: true });
+    const source = await conversation();
+    const user = (await store.appendMessage("alice", source.id, {
+      role: "user",
+      content: "question",
+    }))!;
+    const input = { messageId: user.id, modelId: "m1" };
+    const first = await call(
+      "alice",
+      "POST",
+      `/conversations/${source.id}/fork`,
+      input
+    );
+    expect(first.status).toBe(201);
+    const result = await first.json();
+    expect(
+      (
+        await call(
+          "alice",
+          "POST",
+          `/conversations/${result.conversation.id}/messages`,
+          { text: result.draft }
+        )
+      ).status
+    ).toBe(503);
+    expect(model.requests).toEqual([]);
+    for (let i = 1; i < 6; i++)
+      expect(
+        (await call("alice", "POST", `/conversations/${source.id}/fork`, input))
+          .status
+      ).toBe(201);
+    const denied = await call(
+      "alice",
+      "POST",
+      `/conversations/${source.id}/fork`,
+      input
+    );
+    expect(denied.status).toBe(429);
+    expect(denied.headers.get("retry-after")).toBe("60");
+  });
+});
+
 describe("GET /models", () => {
   it("lists only models that are priced and allowed", async () => {
     const deny: PolicyDecisionClient = {

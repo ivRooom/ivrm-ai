@@ -21,6 +21,8 @@ export function icon(
     | "chevron"
     | "write"
     | "code"
+    | "refresh"
+    | "branch"
     | "arrow"
 ): SVGSVGElement {
   const ns = "http://www.w3.org/2000/svg";
@@ -63,6 +65,9 @@ export function icon(
       chevron: "M7 10l5 5 5-5",
       write: "M5 5h14M5 10h14M5 15h9M5 20h6",
       code: "m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18",
+      refresh:
+        "M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1",
+      branch: "M6 3v12a4 4 0 0 0 4 4h8M6 7h6a5 5 0 0 0 5-5M15 16l3 3-3 3",
       arrow: "M5 12h14m-5-5 5 5-5 5",
     }[name]
   );

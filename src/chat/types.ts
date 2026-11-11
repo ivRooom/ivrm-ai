@@ -34,6 +34,15 @@ export type NewMessage = {
   costMicroUsd?: number;
 };
 
+export const MAX_FORK_MESSAGES = 200;
+export const MAX_FORK_BYTES = 512 * 1024;
+export type ForkResult =
+  | { conversation: Conversation; draft: string }
+  | {
+      error: "conversation_archived" | "project_archived" | "history_too_large";
+    }
+  | null;
+
 /**
  * Persistence for chat. Every method takes the owner and only ever touches that
  * owner's rows: an id that belongs to someone else behaves as if it did not
@@ -81,6 +90,14 @@ export interface ChatStore {
     title: string
   ): Promise<Conversation | null>;
   setTitleIfEmpty(ownerId: string, id: string, title: string): Promise<void>;
+
+  /** Atomically copies the complete prefix BEFORE an owned user message. Never invokes AI. */
+  forkConversation(
+    ownerId: string,
+    sourceId: string,
+    messageId: string,
+    modelId: string
+  ): Promise<ForkResult>;
 
   /** The latest `limit` messages, oldest first. Null if not the owner's. */
   listMessages(

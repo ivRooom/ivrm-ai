@@ -9,6 +9,182 @@ export function chatStoreContract(
   make: () => Promise<ChatStore>
 ) {
   describe(`ChatStore contract: ${name}`, () => {
+    it("forks before an owned user message, keeps the source, and uses new ids", async () => {
+      const store = await make();
+      const source = (await store.createConversation("alice", {
+        projectId: null,
+        title: "source",
+        modelId: "m1",
+      }))!;
+      const first = (await store.appendMessage("alice", source.id, {
+        role: "user",
+        content: "first",
+      }))!;
+      await store.appendMessage("alice", source.id, {
+        role: "assistant",
+        content: "old answer",
+        modelId: "m1",
+        inputTokens: 10,
+        outputTokens: 20,
+        costMicroUsd: 50,
+      });
+      const target = (await store.appendMessage("alice", source.id, {
+        role: "user",
+        content: "question",
+      }))!;
+      await store.appendMessage("alice", source.id, {
+        role: "assistant",
+        content: "excluded",
+      });
+      const before = await store.listMessages("alice", source.id, 200);
+      const result = await store.forkConversation(
+        "alice",
+        source.id,
+        target.id,
+        "m2"
+      );
+      expect(result && "conversation" in result).toBe(true);
+      if (!result || !("conversation" in result)) throw Error("expected fork");
+      expect(result.draft).toBe("question");
+      expect(result.conversation.modelId).toBe("m2");
+      expect(result.conversation.id).not.toBe(source.id);
+      const copied = (await store.listMessages(
+        "alice",
+        result.conversation.id,
+        200
+      ))!;
+      expect(copied.map((m) => m.content)).toEqual(["first", "old answer"]);
+      expect(copied[0]!.id).not.toBe(first.id);
+      expect(await store.listMessages("alice", source.id, 200)).toEqual(before);
+      expect(
+        await store.forkConversation("bob", source.id, target.id, "m1")
+      ).toBeNull();
+      expect(
+        await store.listMessages("bob", result.conversation.id, 200)
+      ).toBeNull();
+      expect(
+        await store.forkConversation(
+          "alice",
+          result.conversation.id,
+          target.id,
+          "m1"
+        )
+      ).toBeNull();
+      expect(
+        await store.forkConversation("alice", source.id, before![1]!.id, "m1")
+      ).toBeNull();
+    });
+
+    it("refuses archived sources/projects and permits a first-question empty prefix", async () => {
+      const store = await make();
+      const p = await store.createProject("alice", {
+        name: "P",
+        instructions: "x",
+      });
+      const source = (await store.createConversation("alice", {
+        projectId: p.id,
+        title: "",
+        modelId: "m1",
+      }))!;
+      const question = (await store.appendMessage("alice", source.id, {
+        role: "user",
+        content: "only",
+      }))!;
+      const result = await store.forkConversation(
+        "alice",
+        source.id,
+        question.id,
+        "m1"
+      );
+      if (!result || !("conversation" in result)) throw Error("expected fork");
+      expect(result.conversation.projectId).toBe(p.id);
+      expect(
+        await store.listMessages("alice", result.conversation.id, 200)
+      ).toEqual([]);
+      await store.setConversationArchived("alice", source.id, true);
+      expect(
+        await store.forkConversation("alice", source.id, question.id, "m1")
+      ).toEqual({ error: "conversation_archived" });
+      await store.setConversationArchived("alice", source.id, false);
+      await store.setProjectArchived("alice", p.id, true);
+      expect(
+        await store.forkConversation("alice", source.id, question.id, "m1")
+      ).toEqual({ error: "project_archived" });
+    });
+
+    it("copies exactly 200 prefix messages and refuses 201 without creating a partial conversation", async () => {
+      const store = await make();
+      const source = (await store.createConversation("alice", {
+        projectId: null,
+        title: "many",
+        modelId: "m1",
+      }))!;
+      for (let i = 0; i < 200; i++)
+        await store.appendMessage("alice", source.id, {
+          role: i % 2 ? "assistant" : "user",
+          content: String(i),
+        });
+      const atLimit = (await store.appendMessage("alice", source.id, {
+        role: "user",
+        content: "target",
+      }))!;
+      const allowed = await store.forkConversation(
+        "alice",
+        source.id,
+        atLimit.id,
+        "m1"
+      );
+      if (!allowed || !("conversation" in allowed))
+        throw Error("expected fork");
+      expect(
+        (await store.listMessages("alice", allowed.conversation.id, 201))!
+          .length
+      ).toBe(200);
+      const overLimit = (await store.appendMessage("alice", source.id, {
+        role: "user",
+        content: "over",
+      }))!;
+      const before = await store.listConversations("alice", {
+        archived: false,
+      });
+      expect(
+        await store.forkConversation("alice", source.id, overLimit.id, "m1")
+      ).toEqual({ error: "history_too_large" });
+      expect(
+        await store.listConversations("alice", { archived: false })
+      ).toEqual(before);
+    });
+
+    it("bounds prefix bytes using UTF-8 rather than character count", async () => {
+      const store = await make();
+      const source = (await store.createConversation("alice", {
+        projectId: null,
+        title: "bytes",
+        modelId: "m1",
+      }))!;
+      await store.appendMessage("alice", source.id, {
+        role: "user",
+        content: "あ".repeat(174762) + "ab",
+      });
+      const atLimit = (await store.appendMessage("alice", source.id, {
+        role: "user",
+        content: "x",
+      }))!;
+      const allowed = await store.forkConversation(
+        "alice",
+        source.id,
+        atLimit.id,
+        "m1"
+      );
+      expect(allowed && "conversation" in allowed).toBe(true);
+      const over = (await store.appendMessage("alice", source.id, {
+        role: "user",
+        content: "y",
+      }))!;
+      expect(
+        await store.forkConversation("alice", source.id, over.id, "m1")
+      ).toEqual({ error: "history_too_large" });
+    });
     it("renames only the owner's conversation and preserves its messages", async () => {
       const store = await make();
       const c = (await store.createConversation("alice", {

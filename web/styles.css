@@ -1319,3 +1319,49 @@ kbd {
     border: 1px solid CanvasText;
   }
 }
+.workspace-notices {
+  grid-row: 2;
+  width: min(100%, var(--content-width));
+  margin-inline: auto;
+}
+.workspace-notices:empty {
+  display: none;
+}
+.branch-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--accent-soft);
+  font-size: 11px;
+}
+.branch-notice > svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+.branch-notice .text-button {
+  margin-left: auto;
+  color: var(--accent);
+}
+.new-workspace > .workspace-notices {
+  position: absolute;
+  top: var(--header-height);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(100% - 48px), var(--content-width));
+  z-index: 3;
+}
+.new-workspace .workspace-notices > .notice {
+  position: static;
+  transform: none;
+  width: 100%;
+}
+.edit-message-dialog textarea {
+  min-height: 180px;
+}

@@ -105,6 +105,12 @@ export const api = {
       "GET",
       `/conversations/${encodeURIComponent(id)}`
     ),
+  forkConversation: (id: string, messageId: string, modelId: string) =>
+    call<{ conversation: Conversation; draft: string }>(
+      "POST",
+      `/conversations/${encodeURIComponent(id)}/fork`,
+      { messageId, modelId }
+    ),
   renameConversation: (id: string, title: string) =>
     call<{ conversation: Conversation }>(
       "PATCH",
@@ -204,16 +210,22 @@ export function describeError(error: unknown): string {
     case 404:
       return "見つかりませんでした。";
     case 409:
+      if (error.code === "project_archived")
+        return "プロジェクトをアーカイブから復元してから分岐してください。";
       return error.code === "conversation_archived"
         ? "会話をアーカイブから復元してから送信してください。"
         : "操作が競合しました。画面を更新してもう一度お試しください。";
     case 413:
+      if (error.code === "history_too_large")
+        return "分岐できる履歴の上限（200件・512KiB）を超えています。元の会話は変更されていません。";
       return "メッセージが長すぎるか、1 回の上限額を超えます。短くしてください。";
     case 429: {
       const wait = error.retryAfterSeconds
         ? `${error.retryAfterSeconds} 秒ほど待ってから、もう一度お試しください。`
         : "";
       switch (error.reason) {
+        case "fork_rate":
+          return `会話の分岐が多すぎます。${wait}`;
         case "user_daily":
           return "今日の利用上限に達しました。明日(日本時間 0 時以降)にお試しください。";
         case "global_monthly":

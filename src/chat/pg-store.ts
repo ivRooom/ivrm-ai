@@ -1,3 +1,4 @@
+import { MAX_FORK_MESSAGES, MAX_FORK_BYTES, type ForkResult } from "./types.js";
 import type { Pool } from "pg";
 import type {
   ChatStore,
@@ -200,6 +201,86 @@ export class PostgresChatStore implements ChatStore {
         WHERE id = $1 AND owner_id = $2 AND title = ''`,
       [id, ownerId, title]
     );
+  }
+
+  async forkConversation(
+    ownerId: string,
+    sourceId: string,
+    messageId: string,
+    modelId: string
+  ): Promise<ForkResult> {
+    if (!isUuid(sourceId) || !isUuid(messageId)) return null;
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ");
+      const sourceRows = await client.query(
+        "SELECT * FROM conversations WHERE id = $1 AND owner_id = $2 FOR SHARE",
+        [sourceId, ownerId]
+      );
+      const source = sourceRows.rows[0];
+      if (!source) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const targetRows = await client.query(
+        "SELECT seq, content FROM messages WHERE id = $1 AND conversation_id = $2 AND role = 'user'",
+        [messageId, sourceId]
+      );
+      const target = targetRows.rows[0];
+      if (!target) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      if (source.archived_at !== null) {
+        await client.query("ROLLBACK");
+        return { error: "conversation_archived" };
+      }
+      if (source.project_id) {
+        const projectRows = await client.query(
+          "SELECT archived_at FROM projects WHERE id = $1 AND owner_id = $2 FOR SHARE",
+          [source.project_id, ownerId]
+        );
+        if (!projectRows.rows[0]) {
+          await client.query("ROLLBACK");
+          return null;
+        }
+        if (projectRows.rows[0].archived_at !== null) {
+          await client.query("ROLLBACK");
+          return { error: "project_archived" };
+        }
+      }
+      const sizeRows = await client.query(
+        "SELECT count(*) AS count, COALESCE(sum(octet_length(content)), 0) AS bytes FROM messages WHERE conversation_id = $1 AND seq < $2",
+        [sourceId, target.seq]
+      );
+      if (
+        Number(sizeRows.rows[0].count) > MAX_FORK_MESSAGES ||
+        Number(sizeRows.rows[0].bytes) > MAX_FORK_BYTES
+      ) {
+        await client.query("ROLLBACK");
+        return { error: "history_too_large" };
+      }
+      const title = source.title
+        ? Array.from(String(source.title)).slice(0, 290).join("") + " / 分岐"
+        : "分岐した会話";
+      const created = await client.query(
+        "INSERT INTO conversations (owner_id, project_id, title, model_id) VALUES ($1, $2, $3, $4) RETURNING *",
+        [ownerId, source.project_id, title, modelId]
+      );
+      const conversation = toConversation(created.rows[0]);
+      await client.query(
+        `INSERT INTO messages (conversation_id, role, content, model_id)
+        SELECT $1, role, content, model_id FROM messages WHERE conversation_id = $2 AND seq < $3 ORDER BY seq`,
+        [conversation.id, sourceId, target.seq]
+      );
+      await client.query("COMMIT");
+      return { conversation, draft: String(target.content) };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async listMessages(

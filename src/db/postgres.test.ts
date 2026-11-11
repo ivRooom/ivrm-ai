@@ -57,6 +57,58 @@ describe.skipIf(!url)("postgres", () => {
     return new PostgresChatStore(pool);
   });
 
+  it("fork copies never duplicate billing fields and roll back if a copy insert fails", async () => {
+    const store = new PostgresChatStore(pool);
+    const source = (await store.createConversation("fork-atomic", {
+      projectId: null,
+      title: "atomic",
+      modelId: "m1",
+    }))!;
+    await store.appendMessage("fork-atomic", source.id, {
+      role: "assistant",
+      content: "reject-fork-copy",
+      modelId: "m1",
+      inputTokens: 5,
+      outputTokens: 6,
+      costMicroUsd: 20,
+    });
+    const target = (await store.appendMessage("fork-atomic", source.id, {
+      role: "user",
+      content: "question",
+    }))!;
+    const result = await store.forkConversation(
+      "fork-atomic",
+      source.id,
+      target.id,
+      "m1"
+    );
+    if (!result || !("conversation" in result)) throw Error("expected fork");
+    const copied = await pool.query(
+      "SELECT input_tokens, output_tokens, cost_micro_usd FROM messages WHERE conversation_id = $1",
+      [result.conversation.id]
+    );
+    expect(copied.rows).toEqual([
+      { input_tokens: null, output_tokens: null, cost_micro_usd: null },
+    ]);
+    const before = await store.listConversations("fork-atomic", {
+      archived: false,
+    });
+    await pool.query(`CREATE FUNCTION reject_test_fork() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'forced copy failure'; END $$;
+      CREATE TRIGGER reject_test_fork BEFORE INSERT ON messages FOR EACH ROW WHEN (NEW.content = 'reject-fork-copy') EXECUTE FUNCTION reject_test_fork();`);
+    try {
+      await expect(
+        store.forkConversation("fork-atomic", source.id, target.id, "m1")
+      ).rejects.toThrow("forced copy failure");
+      expect(
+        await store.listConversations("fork-atomic", { archived: false })
+      ).toEqual(before);
+    } finally {
+      await pool.query(
+        "DROP TRIGGER reject_test_fork ON messages; DROP FUNCTION reject_test_fork();"
+      );
+    }
+  });
+
   describe("PostgresUsageStore", () => {
     const limits = {
       ...DEFAULT_LIMITS,
