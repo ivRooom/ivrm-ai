@@ -328,7 +328,8 @@ export function chatRoutes(deps: ChatDeps) {
     const conversation = await store.getConversation(owner, id);
     if (!conversation) return notFound();
     const messages = (await store.listMessages(owner, id, VIEW_LIMIT)) ?? [];
-    return c.json({ conversation, messages });
+    const contextUsage = await store.latestContextUsage(owner, id);
+    return c.json({ conversation, messages, contextUsage });
   });
 
   for (const [path, archived] of [

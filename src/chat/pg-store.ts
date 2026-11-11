@@ -3,6 +3,7 @@ import type { UsageBucket } from "./usage.js";
 import type { Pool } from "pg";
 import type {
   ChatStore,
+  ContextUsage,
   Conversation,
   NewMessage,
   Project,
@@ -308,6 +309,30 @@ export class PostgresChatStore implements ChatStore {
     } finally {
       client.release();
     }
+  }
+
+  async latestContextUsage(
+    ownerId: string,
+    conversationId: string
+  ): Promise<ContextUsage | null> {
+    if (!isUuid(conversationId)) return null;
+    const { rows } = await this.pool.query(
+      `SELECT m.model_id, m.input_tokens, m.output_tokens, m.created_at
+       FROM messages m JOIN conversations c ON c.id = m.conversation_id
+       WHERE c.owner_id = $1 AND m.conversation_id = $2 AND m.role = 'assistant'
+         AND m.input_tokens IS NOT NULL AND m.output_tokens IS NOT NULL
+       ORDER BY m.seq DESC LIMIT 1`,
+      [ownerId, conversationId]
+    );
+    const row = rows[0];
+    return row
+      ? {
+          modelId: row.model_id,
+          inputTokens: row.input_tokens,
+          outputTokens: row.output_tokens,
+          measuredAt: iso(row.created_at),
+        }
+      : null;
   }
 
   async listMessages(

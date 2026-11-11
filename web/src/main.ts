@@ -7,6 +7,7 @@ import {
   type Conversation,
   type Me,
   type Message,
+  type ContextUsage,
   type Model,
   type Project,
   type Usage,
@@ -46,7 +47,11 @@ type State = {
   conversations: Conversation[];
   showArchived: boolean;
   projectFilter: string;
-  current: { conversation: Conversation; messages: Message[] } | null;
+  current: {
+    conversation: Conversation;
+    messages: Message[];
+    contextUsage?: ContextUsage | null;
+  } | null;
   modelId: string;
   sending: AbortController | null;
   streaming: string | null;
@@ -1269,6 +1274,7 @@ function chat() {
     (candidate) =>
       candidate.id === (conversation?.projectId ?? state.projectFilter)
   );
+  const contextUsage = state.current?.contextUsage;
   const isEmpty = messages.length === 0 && state.streaming === null;
 
   return h(
@@ -1321,6 +1327,41 @@ function chat() {
     h(
       "div",
       { class: "workspace-notices" },
+      conversation && contextUsage
+        ? h(
+            "details",
+            { class: "context-usage" },
+            h(
+              "summary",
+              {},
+              "コンテキスト · 入力 " +
+                contextUsage.inputTokens.toLocaleString("ja-JP") +
+                " トークン"
+            ),
+            h(
+              "p",
+              {},
+              "直近の完了回答 · 出力 " +
+                contextUsage.outputTokens.toLocaleString("ja-JP") +
+                " トークン"
+            ),
+            h(
+              "p",
+              {},
+              [
+                state.models.find((model) => model.id === contextUsage.modelId)
+                  ?.label ?? contextUsage.modelId,
+                new Intl.DateTimeFormat("ja-JP", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                  timeZone: "Asia/Tokyo",
+                }).format(new Date(contextUsage.measuredAt)) + " JST",
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            )
+          )
+        : null,
       state.branchSource
         ? h(
             "div",
