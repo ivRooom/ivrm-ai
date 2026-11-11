@@ -9,6 +9,7 @@ const bucket = (date: string, tokens: number, modelId = "m1"): UsageBucket => ({
   answers: 1,
   inputTokens: tokens,
   outputTokens: 0,
+  costMicroUsd: tokens,
 });
 
 it("bounds streaks to the displayed year while retaining earlier token totals", () => {
@@ -71,4 +72,28 @@ it("counts consecutive days once across models and keeps yesterday's streak", ()
     activeDays: 2,
   });
   expect(result.models[0]).toMatchObject({ modelId: "m1", answers: 3 });
+});
+
+it("aggregates costs across models, Monday and calendar month boundaries", () => {
+  const { costs } = summarizeUsage(
+    [
+      bucket("2026-10-31", 7),
+      bucket("2026-11-01", 3),
+      bucket("2026-11-02", 5),
+      bucket("2026-11-02", 11, "m2"),
+      bucket("2026-11-03", 99),
+    ],
+    new Date("2026-11-01T15:00:00Z")
+  );
+
+  expect(costs.day[0]).toEqual({ start: "2026-11-02", costMicroUsd: 16 });
+  expect(costs.week.slice(0, 2)).toEqual([
+    { start: "2026-11-02", costMicroUsd: 16 },
+    { start: "2026-10-26", costMicroUsd: 10 },
+  ]);
+  expect(costs.month.slice(0, 3)).toEqual([
+    { start: "2026-11-01", costMicroUsd: 19 },
+    { start: "2026-10-01", costMicroUsd: 7 },
+    { start: "2026-09-01", costMicroUsd: 0 },
+  ]);
 });

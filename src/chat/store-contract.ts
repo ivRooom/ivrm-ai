@@ -22,7 +22,7 @@ export function chatStoreContract(
         modelId: "m1",
         inputTokens: 12,
         outputTokens: 8,
-        costMicroUsd: 0,
+        costMicroUsd: 37,
       });
       await store.appendMessage("alice", source.id, {
         role: "assistant",
@@ -47,6 +47,7 @@ export function chatStoreContract(
           answers: 1,
           tokens: 20,
           maxTokens: 20,
+          costMicroUsd: 37,
         }),
       ]);
       expect(await store.getUsageBuckets("bob")).toEqual([]);

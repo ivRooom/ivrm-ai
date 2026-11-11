@@ -55,6 +55,7 @@ export class InMemoryChatStore implements ChatStore {
         maxTokens: 0,
         inputTokens: 0,
         outputTokens: 0,
+        costMicroUsd: 0,
       };
       const tokens = m.inputTokens + m.outputTokens;
       row.answers++;
@@ -62,6 +63,7 @@ export class InMemoryChatStore implements ChatStore {
       row.maxTokens = Math.max(row.maxTokens, tokens);
       row.inputTokens += m.inputTokens;
       row.outputTokens += m.outputTokens;
+      row.costMicroUsd += m.costMicroUsd;
       buckets.set(key, row);
     }
     return [...buckets.values()].sort(
