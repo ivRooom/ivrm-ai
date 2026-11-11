@@ -175,6 +175,20 @@ export class PostgresChatStore implements ChatStore {
     return rows[0] ? toConversation(rows[0]) : null;
   }
 
+  async renameConversation(
+    ownerId: string,
+    id: string,
+    title: string
+  ): Promise<Conversation | null> {
+    if (!isUuid(id)) return null;
+    const { rows } = await this.pool.query(
+      `UPDATE conversations SET title = $3, updated_at = now()
+       WHERE id = $1 AND owner_id = $2 RETURNING *`,
+      [id, ownerId, title]
+    );
+    return rows[0] ? toConversation(rows[0]) : null;
+  }
+
   async setTitleIfEmpty(
     ownerId: string,
     id: string,

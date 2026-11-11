@@ -75,6 +75,11 @@ export interface ChatStore {
     id: string,
     archived: boolean
   ): Promise<Conversation | null>;
+  renameConversation(
+    ownerId: string,
+    id: string,
+    title: string
+  ): Promise<Conversation | null>;
   setTitleIfEmpty(ownerId: string, id: string, title: string): Promise<void>;
 
   /** The latest `limit` messages, oldest first. Null if not the owner's. */

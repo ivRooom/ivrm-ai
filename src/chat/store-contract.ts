@@ -9,6 +9,32 @@ export function chatStoreContract(
   make: () => Promise<ChatStore>
 ) {
   describe(`ChatStore contract: ${name}`, () => {
+    it("renames only the owner's conversation and preserves its messages", async () => {
+      const store = await make();
+      const c = (await store.createConversation("alice", {
+        projectId: null,
+        title: "old",
+        modelId: "m1",
+      }))!;
+      await store.appendMessage("alice", c.id, {
+        role: "user",
+        content: "keep",
+      });
+      expect(await store.renameConversation("bob", c.id, "hijack")).toBeNull();
+      expect(
+        await store.renameConversation("alice", "invalid", "bad")
+      ).toBeNull();
+      expect(
+        await store.renameConversation("alice", c.id, "新しいタイトル")
+      ).toMatchObject({ title: "新しいタイトル", modelId: "m1" });
+      await store.setTitleIfEmpty("alice", c.id, "automatic");
+      expect((await store.getConversation("alice", c.id))?.title).toBe(
+        "新しいタイトル"
+      );
+      expect((await store.listMessages("alice", c.id, 200))?.[0]?.content).toBe(
+        "keep"
+      );
+    });
     it("creates and reads a project, only for its owner", async () => {
       const store = await make();
       const project = await store.createProject("alice", {

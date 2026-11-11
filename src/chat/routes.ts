@@ -278,6 +278,27 @@ export function chatRoutes(deps: ChatDeps) {
     return json(201, { conversation });
   });
 
+  const renameBody = z
+    .object({ title: z.string().trim().min(1).max(300) })
+    .strict();
+  app.patch("/conversations/:id", async (c) => {
+    const body = await readJson(c, renameBody);
+    if (!body) return badRequest();
+    const owner = c.get("session").userId;
+    const conversation = await store.renameConversation(
+      owner,
+      c.req.param("id"),
+      body.title
+    );
+    if (!conversation) return notFound();
+    await record(
+      owner,
+      "conversation.rename",
+      `conversation/${conversation.id}`
+    );
+    return c.json({ conversation });
+  });
+
   app.get("/conversations/:id", async (c) => {
     const owner = c.get("session").userId;
     const id = c.req.param("id");
@@ -323,6 +344,8 @@ export function chatRoutes(deps: ChatDeps) {
 
     const conversation = await store.getConversation(owner, id);
     if (!conversation) return notFound();
+    if (conversation.archived)
+      return json(409, { error: "conversation_archived" });
 
     const modelId = body.modelId ?? conversation.modelId;
     const denied = await checkModel(c, modelId);
