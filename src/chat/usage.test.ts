@@ -11,6 +11,23 @@ const bucket = (date: string, tokens: number, modelId = "m1"): UsageBucket => ({
   outputTokens: 0,
 });
 
+it("bounds streaks to the displayed year while retaining earlier token totals", () => {
+  const result = summarizeUsage(
+    [
+      bucket("2025-11-11", 70),
+      bucket("2025-11-12", 10),
+      bucket("2025-11-13", 20),
+    ],
+    new Date("2026-11-11T03:00:00Z")
+  );
+  expect(result).toMatchObject({
+    totalTokens: 100,
+    longestStreak: 2,
+    currentStreak: 0,
+    activeDays: 2,
+  });
+});
+
 it("uses JST at midnight and zero-fills exactly 365 days", () => {
   const rows = [
     bucket("2026-11-09", 5),

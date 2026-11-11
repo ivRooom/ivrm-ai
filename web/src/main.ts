@@ -203,6 +203,7 @@ async function goTo(id: string | null) {
 /** Create a conversation if needed, then send and stream one user message. */
 async function send(text: string) {
   if (state.sending || state.forking || !text.trim()) return;
+  let viewSeq = openSeq;
   state.notice = null;
   const controller = new AbortController();
   state.sending = controller;
@@ -216,7 +217,7 @@ async function send(text: string) {
       });
       // Creation cannot be cancelled: if the person moved on meanwhile, the
       // empty conversation stays in the list but is not opened.
-      if (controller.signal.aborted)
+      if (controller.signal.aborted || viewSeq !== openSeq)
         throw new DOMException("aborted", "AbortError");
       state.current = { conversation, messages: [] };
       navigate(conversation.id);
@@ -236,6 +237,7 @@ async function send(text: string) {
       { text, modelId: state.modelId },
       controller.signal
     )) {
+      if (viewSeq !== openSeq) return;
       if (event.type === "delta") {
         state.streaming += event.text;
         drawStreaming();
@@ -243,11 +245,15 @@ async function send(text: string) {
         failed = describeStreamError(event.code);
       }
     }
+    if (viewSeq !== openSeq || controller.signal.aborted) return;
+    viewSeq++;
     await openConversation(conversation.id);
+    if (viewSeq !== openSeq) return;
     await loadLists();
     // After the reload, which clears the notice: say why the reply is gone.
-    if (failed) state.notice = failed;
+    if (failed && viewSeq === openSeq) state.notice = failed;
   } catch (error) {
+    if (viewSeq !== openSeq) return;
     if (controller.signal.aborted) {
       state.notice = "回答を止めました。止めた回答は保存されません。";
     } else {
@@ -334,7 +340,7 @@ function openSettings() {
 async function forkMessage(messageId: string, replacement?: string) {
   if (!state.current || state.sending || state.forking) return;
   const source = state.current.conversation;
-  const seq = openSeq;
+  let seq = openSeq;
   state.forking = true;
   state.notice = null;
   draw();
@@ -346,15 +352,22 @@ async function forkMessage(messageId: string, replacement?: string) {
     );
     if (seq !== openSeq || state.current?.conversation.id !== source.id) return;
     state.draft = replacement ?? result.draft;
+    seq++;
     await openConversation(result.conversation.id);
-    if (state.current?.conversation.id !== result.conversation.id) return;
+    if (
+      seq !== openSeq ||
+      state.current?.conversation.id !== result.conversation.id
+    )
+      return;
     state.branchSource = { id: source.id, title: source.title || "元の会話" };
     await loadLists();
+    if (seq !== openSeq) return;
     state.forking = false;
     const text = state.draft;
     state.draft = "";
     await send(text);
   } catch (error) {
+    if (seq !== openSeq) return;
     state.notice =
       describeError(error) +
       (!(error instanceof ApiError)
@@ -1575,7 +1588,10 @@ function draw() {
             projects: state.projects,
             recent: state.recent,
             retry: () => void loadHome(),
-            newChat: () => void goTo(null),
+            newChat: () => {
+              state.draft = "";
+              void goTo(null);
+            },
             toggleNavigation,
             openConversation: (id) => void goTo(id),
             openProject: (id) => void selectProject(id),

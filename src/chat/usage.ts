@@ -49,7 +49,7 @@ export function summarizeUsage(buckets: UsageBucket[], now: Date) {
     models.set(b.modelId, model);
   }
   const active = [...days.values()]
-    .filter((d) => d.answers > 0)
+    .filter((d) => d.answers > 0 && dayMs(d.date) >= start)
     .map((d) => d.date)
     .sort();
   let longestStreak = 0,
@@ -64,7 +64,10 @@ export function summarizeUsage(buckets: UsageBucket[], now: Date) {
   let cursor = dayMs(today);
   if (!days.has(today)) cursor -= 86_400_000;
   let currentStreak = 0;
-  while (days.get(new Date(cursor).toISOString().slice(0, 10))?.answers) {
+  while (
+    cursor >= start &&
+    days.get(new Date(cursor).toISOString().slice(0, 10))?.answers
+  ) {
     currentStreak++;
     cursor -= 86_400_000;
   }

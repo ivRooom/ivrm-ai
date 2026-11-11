@@ -34,5 +34,5 @@ Postgres17込み199/199 tests pass。Semgrep success。Snykはprivate tests quot
 
 #63でプロフィール、利用統計、365日ヒートマップ、モデル実績、プロジェクト・最近の会話を実装。
 #62 UI、#64 編集・再生成に続く変更。元の会話を残す分岐のコピーは統計に再加算しない。
-docs/profile-home.md と証跡を参照。ローカル185件成功、35件はPostgreSQL CIで実行。
+docs/profile-home.md と証跡を参照。ローカル186件成功、35件はPostgreSQL CIで実行。
 本番変更なし。次は最新CIとレビュー確認、承認後に #62 → #64 → プロフィールPR を統合。
