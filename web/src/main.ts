@@ -1684,6 +1684,11 @@ function draw() {
               state.draft = "";
               void goTo(null);
             },
+            openTools: () => openWorkspaceTools(),
+            openIntegrations: () => {
+              const owner = state.me?.id;
+              if (owner) openIntegrations(owner);
+            },
             toggleNavigation,
             openConversation: (id) => void goTo(id),
             openProject: (id) => void selectProject(id),

@@ -160,6 +160,8 @@ export function profileHome(input: {
   recent: Conversation[];
   retry: () => void;
   newChat: () => void;
+  openTools?: () => void;
+  openIntegrations?: () => void;
   toggleNavigation: () => void;
   openConversation: (id: string) => void;
   openProject: (id: string) => void;
@@ -216,6 +218,43 @@ export function profileHome(input: {
         h("h1", {}, me.username),
         h("p", {}, "ivRooom メンバー")
       ),
+      input.openTools && input.openIntegrations
+        ? h(
+            "section",
+            {
+              class: "home-section cowork-launch",
+              "aria-label": "Cowork ワークスペース",
+            },
+            h("h2", {}, "Cowork"),
+            h(
+              "p",
+              { class: "home-note" },
+              "会話を始める、ツールを使う、連携を管理する。"
+            ),
+            h(
+              "div",
+              { class: "cowork-actions" },
+              workspaceAction(
+                "compose",
+                "新しいチャット",
+                "新しい会話を始める",
+                input.newChat
+              ),
+              workspaceAction(
+                "layers",
+                "ツール",
+                "組み込み MCP を使う",
+                input.openTools
+              ),
+              workspaceAction(
+                "settings",
+                "連携の管理",
+                "MCP とプラグインを登録する",
+                input.openIntegrations
+              )
+            )
+          )
+        : null,
       h(
         "dl",
         { class: "profile-metrics", "aria-label": "保存済み回答の利用実績" },
@@ -363,5 +402,20 @@ export function profileHome(input: {
           )
         : null
     )
+  );
+}
+
+function workspaceAction(
+  symbol: "compose" | "layers" | "settings",
+  title: string,
+  description: string,
+  onclick: () => void
+) {
+  return h(
+    "button",
+    { type: "button", class: "cowork-action", onclick },
+    icon(symbol),
+    h("span", {}, h("strong", {}, title), h("small", {}, description)),
+    icon("arrow")
   );
 }

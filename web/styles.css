@@ -1764,3 +1764,30 @@ kbd {
 .integration-dialog li {
   overflow-wrap: anywhere;
 }
+
+.cowork-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.cowork-action {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 4.25rem;
+  text-align: start;
+  padding: 0.65rem;
+}
+
+.cowork-action span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.cowork-action small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
