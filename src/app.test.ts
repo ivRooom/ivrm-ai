@@ -335,3 +335,53 @@ describe("loadConfig", () => {
     ).toBe("static-allow");
   });
 });
+
+describe("workspace MCP", () => {
+  const request = (method: string, params?: unknown, origin = ORIGIN) => ({
+    method: "POST",
+    headers: { origin, "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+
+  it("uses the authenticated user's budget and refuses caller-supplied owner IDs", async () => {
+    const { app } = appWith({});
+    const response = await app.request(
+      "/api/mcp",
+      request("tools/call", {
+        name: "daily_budget",
+        arguments: {},
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    const body = await response.json();
+    expect(JSON.parse(body.result.content[0].text)).toMatchObject({
+      usedMicroUsd: 0,
+      remainingMicroUsd: expect.any(Number),
+    });
+    const denied = await app.request(
+      "/api/mcp",
+      request("tools/call", {
+        name: "daily_budget",
+        arguments: { userId: "other" },
+      })
+    );
+    expect(await denied.json()).toMatchObject({ error: { code: -32602 } });
+  });
+
+  it("rejects unauthenticated and cross-origin requests", async () => {
+    const anonymous = appWith({ verify: async () => null }).app;
+    expect(
+      (await anonymous.request("/api/mcp", request("tools/list"))).status
+    ).toBe(401);
+    const { app } = appWith({});
+    expect(
+      (
+        await app.request(
+          "/api/mcp",
+          request("tools/list", undefined, "https://other.example")
+        )
+      ).status
+    ).toBe(403);
+  });
+});

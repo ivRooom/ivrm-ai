@@ -1,3 +1,4 @@
+import { openWorkspaceTools } from "./workspace-tools.js";
 import { openIntegrations, registeredSkills } from "./integrations.js";
 import { openSkills, skillHistory } from "./skills.js";
 import {
@@ -1511,6 +1512,15 @@ function chat() {
                   ),
               },
               "スキル"
+            ),
+            h(
+              "button",
+              {
+                class: "text-button composer-skill",
+                type: "button",
+                onclick: () => openWorkspaceTools(conversation?.id),
+              },
+              "ツール"
             ),
             h("span", { class: "grow" }),
             h(
