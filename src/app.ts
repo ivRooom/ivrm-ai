@@ -1,3 +1,4 @@
+import { workspaceMcp } from "./workspace-mcp.js";
 import { Hono } from "hono";
 import {
   requireAiAccess,
@@ -28,6 +29,7 @@ export function createApp(deps: AppDeps) {
       },
     });
   });
+  api.route("/mcp", workspaceMcp(deps.chat));
   api.route("/admin", adminModelRoutes(deps.chat.catalog, deps.chat.now));
   api.route("/", chatRoutes(deps.chat));
   app.route("/api", api);
