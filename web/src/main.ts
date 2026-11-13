@@ -1755,6 +1755,9 @@ function draw() {
                 "div",
                 { class: "home-content" },
                 h("h1", { id: "cowork-title", tabindex: "-1" }, "Cowork"),
+                state.notice
+                  ? h("p", { class: "notice", role: "alert" }, state.notice)
+                  : null,
                 h(
                   "div",
                   { class: "cowork-actions" },
