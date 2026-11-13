@@ -33,10 +33,13 @@
   --content-width: 760px;
   --header-height: 68px;
   --font-sans:
-    Inter, "Segoe UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    "Yu Gothic UI", Meiryo, "Hiragino Sans", "Noto Sans JP", Inter, "Segoe UI",
+    system-ui, sans-serif;
   --font-display:
-    "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", Georgia, serif;
-  --font-mono: "SFMono-Regular", Consolas, monospace;
+    "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", "Noto Serif CJK JP",
+    "MS PMincho", serif;
+  --font-mono:
+    "SFMono-Regular", Consolas, "BIZ UDGothic", "MS Gothic", monospace;
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
