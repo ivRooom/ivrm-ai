@@ -97,12 +97,16 @@ function conversationIdFromPath(): string | null {
   return match ? decodeURIComponent(match[1]!) : null;
 }
 
+let cowork = location.pathname === "/cowork";
+
 function navigate(conversationId: string | null) {
   const path = conversationId
     ? `/c/${encodeURIComponent(conversationId)}`
-    : state.home
-      ? "/"
-      : "/new";
+    : cowork
+      ? "/cowork"
+      : state.home
+        ? "/"
+        : "/new";
   if (location.pathname !== path) history.pushState(null, "", path);
 }
 
@@ -137,12 +141,23 @@ async function loadHome() {
   draw();
 }
 async function openHome() {
+  cowork = false;
   state.home = true;
   state.branchSource = null;
   state.sending?.abort();
   if (state.sidebarOpen) setSidebarOpen(false);
   await openConversation(null);
   await loadHome();
+}
+
+async function openCowork() {
+  cowork = true;
+  state.home = false;
+  state.branchSource = null;
+  state.sending?.abort();
+  state.sidebarOpen = false;
+  await openConversation(null);
+  if (cowork) document.getElementById("cowork-title")?.focus();
 }
 
 async function loadLists() {
@@ -188,6 +203,7 @@ async function openConversation(id: string | null) {
  * stop button) instead of being drawn under another conversation.
  */
 async function goTo(id: string | null) {
+  cowork = false;
   state.home = false;
   state.branchSource = null;
   state.sending?.abort();
@@ -979,6 +995,28 @@ function sidebar() {
       h(
         "button",
         {
+          type: "button",
+          class: "item",
+          "aria-current": !state.home && !cowork ? "page" : undefined,
+          onclick: () => void goTo(state.current?.conversation.id ?? null),
+        },
+        icon("compose"),
+        "Chat"
+      ),
+      h(
+        "button",
+        {
+          type: "button",
+          class: cowork ? "item active" : "item",
+          "aria-current": cowork ? "page" : undefined,
+          onclick: () => void openCowork(),
+        },
+        icon("layers"),
+        "Cowork"
+      ),
+      h(
+        "button",
+        {
           class: state.home ? "item home-link active" : "item home-link",
           type: "button",
           ...(state.home ? { "aria-current": "page" } : {}),
@@ -1694,7 +1732,71 @@ function draw() {
             openProject: (id) => void selectProject(id),
             createProject: () => editProject(null),
           })
-        : chat()
+        : cowork
+          ? h(
+              "main",
+              { class: "home" },
+              h(
+                "header",
+                { class: "home-toolbar" },
+                h(
+                  "button",
+                  {
+                    class: "icon-button menu-toggle",
+                    type: "button",
+                    "aria-label": "ナビゲーションを開く",
+                    onclick: toggleNavigation,
+                  },
+                  icon("panel")
+                ),
+                h("span", {}, "ワークスペース")
+              ),
+              h(
+                "div",
+                { class: "home-content" },
+                h("h1", { id: "cowork-title", tabindex: "-1" }, "Cowork"),
+                h(
+                  "div",
+                  { class: "cowork-actions" },
+                  h(
+                    "button",
+                    {
+                      class: "cowork-action",
+                      type: "button",
+                      onclick: () => {
+                        state.draft = "";
+                        void goTo(null);
+                      },
+                    },
+                    icon("compose"),
+                    "新しいチャット"
+                  ),
+                  h(
+                    "button",
+                    {
+                      class: "cowork-action",
+                      type: "button",
+                      onclick: () => openWorkspaceTools(),
+                    },
+                    icon("layers"),
+                    "ツール"
+                  ),
+                  h(
+                    "button",
+                    {
+                      class: "cowork-action",
+                      type: "button",
+                      onclick: () => {
+                        if (state.me) openIntegrations(state.me.id);
+                      },
+                    },
+                    icon("settings"),
+                    "連携の管理"
+                  )
+                )
+              )
+            )
+          : chat()
     )
   );
   syncSidebarMode();
@@ -1773,12 +1875,14 @@ async function start() {
     draw();
     return;
   }
-  if (state.home) await openHome();
+  if (cowork) await openCowork();
+  else if (state.home) await openHome();
   else await openConversation(conversationIdFromPath());
 }
 
 window.addEventListener("popstate", () => {
-  if (location.pathname === "/") void openHome();
+  if (location.pathname === "/cowork") void openCowork();
+  else if (location.pathname === "/") void openHome();
   else void goTo(conversationIdFromPath());
 });
 void start();
