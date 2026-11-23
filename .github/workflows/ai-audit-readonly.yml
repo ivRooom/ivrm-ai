@@ -1,0 +1,65 @@
+name: AI metadata audit (read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_audit:
+        description: "Type AUDIT to use the dedicated metadata-only AI role"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ivrm-ai-readonly-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: inputs.confirm_audit == 'AUDIT' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: aws-ai-audit
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Validate nonsecret environment settings
+        shell: bash
+        env:
+          EXPECTED_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          ROLE_ARN: ${{ vars.AWS_AI_AUDIT_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "$AWS_REGION" = "ap-northeast-1"
+          [[ "$EXPECTED_ACCOUNT_ID" =~ ^[0-9]{12}$ ]]
+          [[ "$ROLE_ARN" =~ ^arn:aws:iam::[0-9]{12}:role/ivrm/ai/audit/ivrm-ai-github-audit-readonly-role$ ]]
+          [[ "$ROLE_ARN" == "arn:aws:iam::${EXPECTED_ACCOUNT_ID}:role/ivrm/ai/audit/ivrm-ai-github-audit-readonly-role" ]]
+      - name: Assume AI-only AWS role using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6.1.2
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_AI_AUDIT_ROLE_ARN }}
+          role-session-name: ivrm-ai-readonly-audit
+          mask-aws-account-id: true
+      - name: Verify dedicated role and metadata reads without sensitive output
+        shell: bash
+        env:
+          EXPECTED_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          # Never echo account IDs, raw IAM ARN or full GetCallerIdentity result.
+          current_account="$(aws sts get-caller-identity --query Account --output text)"
+          current_arn="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$current_account" = "$EXPECTED_ACCOUNT_ID"
+          [[ "$current_arn" == "arn:aws:sts::${EXPECTED_ACCOUNT_ID}:assumed-role/ivrm-ai-github-audit-readonly-role/ivrm-ai-readonly-audit" ]] || exit 1
+          ec2_count="$(aws ec2 describe-instances --region ap-northeast-1 --filters Name=tag:Name,Values=ivrm-app-01 --query 'length(Reservations[].Instances[])' --output text)"
+          ssm_count="$(aws ssm describe-instance-information --region ap-northeast-1 --query 'length(InstanceInformationList)' --output text)"
+          alarm_count="$(aws cloudwatch describe-alarms --region ap-northeast-1 --query 'length(MetricAlarms)' --output text)"
+          [[ "$ec2_count" =~ ^[0-9]+$ ]]
+          [[ "$ssm_count" =~ ^[0-9]+$ ]]
+          [[ "$alarm_count" =~ ^[0-9]+$ ]]
+          echo "AI metadata-only STS and three Describe operations: PASS"
+          echo "No AWS writes, no raw identifiers or account content have been output."
