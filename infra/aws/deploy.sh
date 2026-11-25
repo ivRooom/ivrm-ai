@@ -168,7 +168,7 @@ prepare_runtime_env() {
 }
 
 wait_for_healthy() {
-  local attempts="${1:-20}" status
+  local attempts="${1:-60}" status
   for _ in $(seq 1 "$attempts"); do
     status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' ivrm-ai 2>/dev/null || true)"
     [[ "$status" == "healthy" ]] && return 0
@@ -199,7 +199,7 @@ rollback() {
       echo "rolling back ivrm-ai to: $previous_image" >&2
       export IVRM_AI_IMAGE="$previous_image"
       docker compose -f "$COMPOSE_FILE" up -d --force-recreate --remove-orphans || true
-      if wait_for_healthy 10; then
+      if wait_for_healthy 60; then
         printf '%s\n' "$previous_image" > "$CURRENT_IMAGE_FILE"
         echo "ivrm-ai rollback completed" >&2
       else
@@ -238,7 +238,7 @@ fi
 export IVRM_AI_IMAGE
 docker compose -f "$COMPOSE_FILE" up -d --force-recreate --remove-orphans
 
-if ! wait_for_healthy 20; then
+if ! wait_for_healthy 60; then
   echo "ivrm-ai did not become healthy in time" >&2
   exit 1
 fi
